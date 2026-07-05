@@ -1,3 +1,4 @@
 ---
-return Astro.redirect(import.meta.env.BASE_URL + 'en/');
+const base = import.meta.env.BASE_URL.replace(/\/$/, ''); // rimuove eventuale slash finale
+return Astro.redirect(`${base}/en/`);
 ---
