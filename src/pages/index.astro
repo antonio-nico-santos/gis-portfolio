@@ -1,5 +1,5 @@
 ---
 console.log('BASE_URL value:', JSON.stringify(import.meta.env.BASE_URL));
-const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+import { base } from '../utils/base.js';
 return Astro.redirect(`${base}/en/`);
 ---
