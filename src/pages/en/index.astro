@@ -1,6 +1,25 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
-<BaseLayout title="Nico - GIS Portfolio">
-  <h1>Home EN - placeholder</h1>
+<BaseLayout title="Nico Santos - GIS Portfolio">
+  <section class="hero">
+    <h1>Home EN - placeholder</h1>
+    <p>[Intro breve: chi sei, in 1-2 frasi tecniche]</p>
+  </section>
+
+  <section class="case-studies-preview">
+    <article>
+      <h2>Torino Urban Suitability</h2>
+      <a href={`${base}/en/case-study-torino/`}>View case study →</a>
+    </article>
+    <article>
+      <h2>World-building GDR</h2>
+      <a href={`${base}/en/case-study-worldbuilding/`}>View case study →</a>
+    </article>
+  </section>
+
+  <section class="cta">
+    <a href={`${base}/en/contact`}>Get in touch →</a>
+  </section>
 </BaseLayout>
