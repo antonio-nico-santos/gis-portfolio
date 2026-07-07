@@ -23,7 +23,8 @@ const caseStudies = [
 ---
 
 <BaseLayout title="Nico Antonio - GIS Portfolio">
-  <section class="hero">
+  <div class="page-container">
+    <section class="hero">
     <ContourBackground />
     <div class="hero-content">
       <p class="coordinates">45.0703°N 7.6869°E — RELOCATED TO TORINO, IT</p>
@@ -31,9 +32,9 @@ const caseStudies = [
       <p class="intro">Twelve years reading terrain and demand for public agencies in Brazil. Now mapping suitability, cost, and risk for clients anywhere.</p>
       <a class="cta-button" href={`${base}/en/case-study-torino/`}>view case studies →</a>
     </div>
-  </section>
+    </section>
 
-  <section class="case-studies-preview">
+    <section class="case-studies-preview">
     {caseStudies.map((cs) => (
       <article class="case-card">
         <span class={`tag tag-${cs.tagColor}`}>{cs.tag}</span>
@@ -42,7 +43,8 @@ const caseStudies = [
         <a href={`${base}/en/${cs.slug}/`}>View case study →</a>
       </article>
     ))}
-  </section>
+    </section>
+  </div>  
 </BaseLayout>
 
 <style>
