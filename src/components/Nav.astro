@@ -1,10 +1,33 @@
 ---
 import { base } from '../utils/base.js';
 ---
-<nav>
+<nav class="site-nav">
   <a href={`${base}/en/`}>Home</a>
   <a href={`${base}/en/about`}>About</a>
-  <a href={`${base}/en/case-study-torino`}>Torino Case Study</a>
-  <a href={`${base}/en/case-study-worldbuilding`}>World-building Case Study</a>
+  <a href={`${base}/en/case-study-torino`}>Torino Relocation</a>
+  <a href={`${base}/en/case-study-worldbuilding`}>World-building</a>
   <a href={`${base}/en/contact`}>Contact</a>
 </nav>
+
+<style>
+  .site-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    padding: 1rem 1.5rem;
+    background: var(--color-ink-light);
+  }
+  .site-nav a {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: normal;
+    color: var(--color-paper);
+    text-decoration: none;
+    padding: 0.4rem 0.1rem;
+  }
+  .site-nav a:hover,
+  .site-nav a:focus-visible {
+    color: var(--color-brass);
+  }
+</style>
