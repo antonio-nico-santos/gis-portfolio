@@ -1,0 +1,25 @@
+<svg class="contour-bg" viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true">
+  <path style="opacity:0.12" d="M 157,233 Q 170,260 154,284 Q 138,308 114,330 Q 90,352 63,333 Q 36,314 21,287 Q 6,260 22.5,234.5 Q 39,209 64.5,190.5 Q 90,172 117,189 Q 144,206 157,233 Z" />
+  <path style="opacity:0.10" d="M 194.5,218 Q 215,260 190,297.5 Q 165,335 127.5,369.5 Q 90,404 48,374 Q 6,344 -17.5,302 Q -41,260 -15.25,220.25 Q 10.5,180.5 50.25,151.75 Q 90,123 132,149.5 Q 174,176 194.5,218 Z" />
+  <path class="index-contour" style="opacity:0.16" d="M 236.5,201 Q 265,260 230,312.5 Q 195,365 142.5,413 Q 90,461 31,419.5 Q -28,378 -61,319 Q -94,260 -57.5,204.5 Q -21,149 34.5,108.5 Q 90,68 149,105 Q 208,142 236.5,201 Z" />
+  <path style="opacity:0.08" d="M 282.5,183 Q 320,260 274,329 Q 228,398 159,461.5 Q 90,525 12.5,470 Q -65,415 -108.5,337.5 Q -152,260 -104,187 Q -56,114 17,60.5 Q 90,7 167.5,56.5 Q 245,106 282.5,183 Z" />
+</svg>
+
+<style>
+  .contour-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .contour-bg path {
+    fill: none;
+    stroke: var(--color-paper);
+    stroke-width: 1;
+  }
+  .contour-bg .index-contour {
+    stroke: var(--color-brass);
+    stroke-width: 1.5;
+  }
+</style>

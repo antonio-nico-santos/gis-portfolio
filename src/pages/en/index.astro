@@ -1,32 +1,131 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import ContourBackground from '../../components/ContourBackground.astro';
 import { base } from '../../utils/base.js';
 
-const caseStudies = [ 
+
+const caseStudies = [
   {
-    title: 'Torino Urban Suitability', slug: 'torino'
+    title: 'Torino Urban Suitability',
+    slug: 'case-study-torino',
+    tag: 'urban analysis',
+    tagColor: 'green',
+    description: 'Weighted overlay and isochrone analysis for relocation decisions.',
   },
   {
-    title: 'World-building GDR', slug: 'worldbuilding'
-  }
+    title: 'Fantasy Terrain GIS',
+    slug: 'case-study-worldbuilding',
+    tag: 'world-building',
+    tagColor: 'amber',
+    description: 'Climate, biome, and hypsometry modeling for a tabletop setting.',
+  },
 ];
 ---
+
 <BaseLayout title="Nico Antonio - GIS Portfolio">
   <section class="hero">
-    <h1>Home EN - placeholder</h1>
-    <p>[Intro breve: chi sei, in 1-2 frasi tecniche]</p>
+    <ContourBackground />
+    <div class="hero-content">
+      <p class="coordinates">45.0703°N 7.6869°E — RELOCATED TO TORINO, IT</p>
+      <h1>Nico Antonio</h1>
+      <p class="intro">Twelve years reading terrain and demand for public agencies in Brazil. Now mapping suitability, cost, and risk for clients anywhere.</p>
+      <a class="cta-button" href={`${base}/en/case-study-torino/`}>view case studies →</a>
+    </div>
   </section>
 
   <section class="case-studies-preview">
     {caseStudies.map((cs) => (
-      <article>
-        <h2>{cs.title}</h2>
-        <a href={`${base}/en/case-study-${cs.slug}/`}>View case study →</a>
+      <article class="case-card">
+        <span class={`tag tag-${cs.tagColor}`}>{cs.tag}</span>
+        <h3>{cs.title}</h3>
+        <p>{cs.description}</p>
+        <a href={`${base}/en/${cs.slug}/`}>View case study →</a>
       </article>
     ))}
   </section>
-
-  <section class="cta">
-    <a href={`${base}/en/contact`}>Get in touch →</a>
-  </section>
 </BaseLayout>
+
+<style>
+  .hero {
+    background: var(--color-ink);
+    border-radius: 8px;
+    padding: 3rem 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-content {
+    position: relative;
+    z-index: 1;
+  }
+  .coordinates {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--color-brass);
+    letter-spacing: 0.06em;
+    margin: 0 0 1rem;
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: 2.25rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.75rem;
+    line-height: 1.2;
+  }
+  .intro {
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    color: var(--color-text-muted-2);
+    max-width: 32rem;
+    line-height: 1.65;
+    margin: 0 0 1.5rem;
+  }
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-ink);
+    background: var(--color-brass);
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    text-decoration: none;
+  }
+  .case-studies-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .case-card {
+    background: var(--color-ink-light);
+    border-radius: 8px;
+    padding: 1.25rem 1.4rem;
+  }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .tag-green { color: var(--color-tag-green); }
+  .tag-amber { color: var(--color-tag-amber); }
+  .case-card h3 {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0.5rem 0 0.4rem;
+  }
+  .case-card p {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin: 0 0 0.6rem;
+  }
+  .case-card a {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--color-brass);
+    text-decoration: none;
+  }
+</style>
