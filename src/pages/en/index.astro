@@ -4,6 +4,7 @@ import ContourBackground from '../../components/ContourBackground.astro';
 import { base } from '../../utils/base.js';
 
 
+
 const caseStudies = [
   {
     title: 'Torino Urban Suitability',
@@ -22,12 +23,16 @@ const caseStudies = [
 ];
 ---
 
+
 <BaseLayout title="Nico Antonio - GIS Portfolio">
   <div class="page-container">
     <section class="hero">
     <ContourBackground />
     <div class="hero-content">
-      <p class="coordinates">45.0703°N 7.6869°E — RELOCATED TO TORINO, IT</p>
+      <p class="coordinates">
+        <span>45.0703°N 7.6869°E</span>
+        <span>Relocated to Torino, IT</span>
+      </p>
       <h1>Nico Antonio</h1>
       <p class="intro">Twelve years reading terrain and demand for public agencies in Brazil. Now mapping suitability, cost, and risk for clients anywhere.</p>
       <a class="cta-button" href={`${base}/en/case-study-torino/`}>view case studies →</a>
@@ -64,6 +69,9 @@ const caseStudies = [
     color: var(--color-brass);
     letter-spacing: 0.06em;
     margin: 0 0 1rem;
+    display: flex;
+    flex-direction: column;
+   gap: 0.15rem;
   }
   .hero h1 {
     font-family: var(--font-display);
