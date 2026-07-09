@@ -1,6 +1,268 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { base } from '../../../utils/base.js';
 ---
-<BaseLayout title="Torino: Relocation Suitability - Nico Antonio">
-  <h1>Case Study Torino - Overview placeholder</h1>
+<BaseLayout title="Torino: Relocation Suitability - Nico">
+  <div class="page-container case-study">
+
+    <header class="case-hero">
+      <p class="eyebrow">Case Study — Urban Suitability</p>
+      <h1>Finding a Home in a City We'd Never Seen</h1>
+      <p class="intro">
+        In mid-2025, my wife had three job offers in Italy. We flew from
+        Brazil to visit each city before choosing, picked one, and came
+        home to prepare the move. That offer then fell through over
+        bureaucratic delays — by which point we'd already given up our
+        apartment and were staying with family, waiting to leave. A second
+        scouting trip wasn't an option, so when a new contract came
+        through — this time for Torino, a city neither of us had ever
+        seen — there was no way to visit it in person. With no time for
+        fieldwork, I turned my GIS toolkit toward a personal problem:
+        narrowing down a neighborhood, a nursery with availability, and an
+        affordable apartment, entirely from spatial data, before arriving.
+      </p>
+      <p class="aside">
+        I ended up calling it, only half-jokingly, the "Urban Suitability
+        Re-location" project.
+      </p>
+      <div class="image-placeholder hero-image">Map placeholder — hero image</div>
+    </header>
+
+    <section class="methodology">
+
+      <article class="step">
+        <h2>1. Getting to know a city we'd never visited</h2>
+        <p>
+          Before anything quantitative, I used ISTAT census data — age
+          brackets, foreign-resident share, education level — to look for
+          areas where the resident population resembled our own profile:
+          young families in a similar age range, rather than a generic
+          demographic snapshot of the city. Together with OMI zone price
+          data, this became a set of independent choropleth maps, not a
+          combined score — an exploratory read aimed at that specific
+          question. Classes were defined with quantile and Jenks natural
+          breaks, tested in parallel, since equal-interval classes failed
+          to surface meaningful spatial variation in the data.
+        </p>
+        <div class="image-placeholder">Choropleth maps — ISTAT / OMI</div>
+      </article>
+
+      <article class="step">
+        <h2>2. Commute isochrones to three work sites</h2>
+        <p>
+          My wife's job involved regular travel to three sites outside
+          Torino (Luserna San Giovanni, Aosta, Moncalieri), reachable only
+          by car. I built the regional road network with OSMnx, assigning
+          travel speed by road type (motorway / trunk / primary /
+          secondary / tertiary / residential) since real-world speed data
+          isn't consistently available per segment. For each site,
+          QNEAT3's Iso-Area interpolation produced a continuous
+          travel-time raster; the three were combined with Raster
+          Calculator into several weighted weekly-commute scenarios,
+          since visit frequency per site wasn't known in advance.
+        </p>
+        <p class="callout">
+          <strong>Known limitation, stated deliberately:</strong> this
+          treats the road network as undirected and doesn't account for
+          one-way restrictions — adequate for regional-scale comparison,
+          not for street-level routing.
+        </p>
+        <div class="image-placeholder">Combined commute raster / scenario table</div>
+      </article>
+
+      <article class="step">
+        <h2>3. Local services and nursery availability</h2>
+        <p>
+          OpenStreetMap coverage for local services (nurseries, markets,
+          gyms, playgrounds, pharmacies) proved too sparse compared to
+          Google Places, so I queried the Places API directly — splitting
+          the comune into sub-areas to stay under its per-query result
+          cap — for both Torino and Pinerolo, then cleaned the resulting
+          dataset (AOI filtering, duplicate removal) before loading it
+          into PostGIS.
+        </p>
+        <p>
+          For nurseries specifically, I contacted 100+ by email to ask
+          about availability, updating status directly in PostGIS as
+          responses came in.
+        </p>
+      </article>
+
+      <article class="step">
+        <h2>4. Walking-distance isochrones from available nurseries</h2>
+        <p>
+          Using the pedestrian network (OSM footways, also via OSMnx) and
+          QNEAT3's Iso-Area tools (Contours and Polygons, from Layer), I
+          mapped distance bands — 200 to 1200m in 200m increments — from
+          nurseries with confirmed availability.
+        </p>
+        <p class="callout">
+          <strong>A deliberate methodological choice:</strong> distance
+          instead of time. Walking time with a toddler is too variable to
+          be a reliable metric, so shortest-path distance was used
+          instead of the fastest-path time model applied to the commute
+          step above — a different metric for a different kind of
+          movement.
+        </p>
+        <div class="image-placeholder">Distance-band map — nurseries</div>
+      </article>
+
+      <article class="step">
+        <h2>5. Narrowing down to a shortlist of areas</h2>
+        <p>
+          Nursery proximity worked as a hard exclusion filter. The
+          demographic context, service layers, and commute isochrones
+          from steps 1–2 were then used as reference layers —
+          cross-checked manually, not combined into a weighted overlay —
+          to narrow the search to a handful of promising areas.
+        </p>
+        <p>
+          Pinerolo, closer to two of the three work sites, was carried
+          through this same process as a real alternative — and ruled
+          out once the data showed too few nursery vacancies and
+          apartment listings to work with.
+        </p>
+      </article>
+
+      <article class="step">
+        <h2>6. Manual listing search</h2>
+        <p>
+          Scraping immobiliare.it and idealista.it was ruled out for
+          terms-of-service reasons, so listings within the shortlisted
+          areas were searched manually, using each site's
+          draw-a-search-area tool. Promising listings were digitized as
+          points in the database, with attributes filled in by hand.
+        </p>
+      </article>
+
+      <article class="step">
+        <h2>7. Real monthly cost model</h2>
+        <p>
+          Listed price alone doesn't reflect real cost, so each candidate
+          apartment was enriched — via follow-up contact — with
+          condominium fees, heating, an electricity estimate, and parking
+          (subscription or rental cost, where no spot was included).
+          Nursery fees were added per listing based on the nearest
+          available nursery. One-off costs — furnishing (for unfurnished
+          units) and agency commission — were amortized over an assumed
+          minimum one-year tenancy to produce a comparable monthly
+          figure. Missing values were imputed with the average across the
+          candidate set. The resulting ranking was used to prioritize
+          which apartments to contact and visit first.
+        </p>
+        <div class="image-placeholder">Cost ranking — relative index</div>
+      </article>
+
+    </section>
+
+    <section class="result">
+      <h2>Result</h2>
+      <p>
+        We saw Torino for the first time the week we moved in — and
+        within days had signed a lease on an apartment 800 meters from
+        our daughter's nursery, in a neighborhood we'd only ever known
+        through census tables, isochrone maps, and a spreadsheet of email
+        replies.
+      </p>
+    </section>
+
+    <a class="cta-button" href={`${base}/en/case-study-torino/technical/`}>
+      Read the technical deep dive →
+    </a>
+
+  </div>
 </BaseLayout>
+
+<style>
+  .case-study {
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-brass);
+    margin: 0 0 0.5rem;
+  }
+  .case-hero h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    line-height: 1.25;
+    margin: 0 0 1.25rem;
+  }
+  .intro, .step p, .result p {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+  }
+  .aside {
+    font-family: var(--font-body);
+    font-style: italic;
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+    margin: 0 0 2rem;
+  }
+  .step {
+    margin: 2.5rem 0;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(198, 146, 20, 0.12);
+  }
+  .step h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.9rem;
+  }
+  .callout {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    border-left: 3px solid var(--color-brass);
+    padding: 0.85rem 1.1rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+  }
+  .image-placeholder {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    border: 1px dashed rgba(159, 173, 185, 0.4);
+    border-radius: 6px;
+    padding: 2.5rem 1rem;
+    text-align: center;
+    margin: 1.25rem 0;
+  }
+  .hero-image {
+    padding: 4rem 1rem;
+  }
+  .result {
+    margin: 3rem 0 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(198, 146, 20, 0.12);
+  }
+  .result h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-brass);
+    margin: 0 0 0.9rem;
+  }
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-ink);
+    background: var(--color-brass);
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    text-decoration: none;
+  }
+</style>
