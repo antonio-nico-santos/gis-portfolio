@@ -5,47 +5,52 @@ import { Image } from 'astro:assets';
 import torinoRoadNetwork from '../../../assets/images/torino-road-network.png';
 ---
 <BaseLayout title="Torino: Relocation Suitability - Nico">
-  <div class="page-container case-study">
+  <div class="page-container">
+    <div class="case-study">
+      <header class="case-hero">
+        <p class="eyebrow">Case Study — Urban Suitability</p>
+        <h1>Finding a Home in a City We'd Never Seen</h1>
+        <p class="intro">
+          In mid-2025, my wife had three job offers in Italy. We flew from
+          Brazil to visit each city before choosing, picked one, and came
+          home to prepare the move. That offer then fell through over
+          bureaucratic delays — by which point we'd already given up our
+          apartment and were staying with family, waiting to leave. A second
+          scouting trip wasn't an option, so when a new contract came
+          through — this time for Torino, a city neither of us had ever
+          seen — there was no way to visit it in person. With no time for
+          fieldwork, I turned my GIS toolkit toward a personal problem:
+          narrowing down a neighborhood, a nursery with availability, and an
+          affordable apartment, entirely from spatial data, before arriving.
+        </p>
+        <p class="aside">
+          I ended up calling it, only half-jokingly, the "Urban Suitability
+          Re-location" project.
+        </p>
+       
+      </header>
+    </div>
 
-    <header class="case-hero">
-      <p class="eyebrow">Case Study — Urban Suitability</p>
-      <h1>Finding a Home in a City We'd Never Seen</h1>
-      <p class="intro">
-        In mid-2025, my wife had three job offers in Italy. We flew from
-        Brazil to visit each city before choosing, picked one, and came
-        home to prepare the move. That offer then fell through over
-        bureaucratic delays — by which point we'd already given up our
-        apartment and were staying with family, waiting to leave. A second
-        scouting trip wasn't an option, so when a new contract came
-        through — this time for Torino, a city neither of us had ever
-        seen — there was no way to visit it in person. With no time for
-        fieldwork, I turned my GIS toolkit toward a personal problem:
-        narrowing down a neighborhood, a nursery with availability, and an
-        affordable apartment, entirely from spatial data, before arriving.
-      </p>
-      <p class="aside">
-        I ended up calling it, only half-jokingly, the "Urban Suitability
-        Re-location" project.
-      </p>
-      <div class="hero-split">
-        <Image
-          src={torinoRoadNetwork}
-          alt="Road network of Torino, color-coded by hierarchy"
-          widths={[400, 800, 1200]}
-          sizes="(max-width: 640px) 100vw, 60vw"
-          format="webp"
-          quality={80}
-        />
-        <div class="hero-text">
-          <h2>Torino: Road Network</h2>
-          <p>The road network extracted for this project — the same graph later weighted for driving and walking analysis.</p>
-        </div>
+    <figure class="hero-split">
+      <Image
+        src={torinoRoadNetwork}
+        alt="Road network of Torino, color-coded by hierarchy"
+        widths={[400, 800, 1200]}
+        sizes="(max-width: 640px) 100vw, 60vw"
+        format="webp"
+        quality={80}
+      />
+      <div class="hero-text">
+        <h2>Torino: Road Network</h2>
+        <p>The road network extracted for this project — the same graph later weighted for driving and walking analysis.</p>
       </div>
-    </header>
+    </figure>
+    <figcaption class="map-source">Data: © OpenStreetMap contributors</figcaption>
 
-    <section class="methodology">
+    <div class="case-study">
+      <section class="methodology">
 
-      <article class="step">
+        <article class="step">
         <h2>1. Getting to know a city we'd never visited</h2>
         <p>
           Before anything quantitative, I used ISTAT census data — age
@@ -184,7 +189,7 @@ import torinoRoadNetwork from '../../../assets/images/torino-road-network.png';
     <a class="cta-button" href={`${base}/en/case-study-torino/technical/`}>
       Read the technical deep dive →
     </a>
-
+    </div>
   </div>
 </BaseLayout>
 
@@ -280,43 +285,53 @@ import torinoRoadNetwork from '../../../assets/images/torino-road-network.png';
     border-radius: 4px;
     text-decoration: none;
   }
-    .hero-split {
+  .hero-split {
     display: flex;
-    gap: 2rem;
-    align-items: center;
+    gap: 1.5rem;
+    align-items: flex-start;
     margin-top: 2rem;
+    width: min(145%, 58rem);
   }
   .hero-split img {
-    flex: 1 1 60%;
+    flex: 1 1 auto;
     width: 100%;
     height: auto;
+    min-width: 0;
     border-radius: 8px;
     display: block;
   }
   .hero-text {
-    flex: 1 1 40%;
+    flex: 0 0 15rem;
     background: var(--color-paper);
     color: var(--color-ink);
-    padding: 1.5rem;
+    padding: 1.25rem;
     border-radius: 8px;
   }
   .hero-text h2 {
     font-family: var(--font-display);
-    font-size: 1.4rem;
+    font-size: 1.15rem;
     font-weight: 600;
-    margin: 0 0 0.75rem;
+    margin: 0 0 0.65rem;
+    line-height: 1.3;
   }
   .hero-text p {
     font-family: var(--font-body);
-    font-size: 0.95rem;
-    line-height: 1.6;
+    font-size: 0.88rem;
+    line-height: 1.55;
     margin: 0;
   }
-
   @media (max-width: 640px) {
     .hero-split {
       flex-direction: column;
+      width: 100%;
     }
   }
+  .map-source {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+  }
 
+  
 </style>
