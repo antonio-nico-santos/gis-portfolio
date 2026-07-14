@@ -1,0 +1,40 @@
+---
+import { Image } from 'astro:assets';
+
+interface LegendItem {
+  color: string;
+  label: string;
+}
+interface Props {
+  img: ImageMetadata;
+  alt: string;
+  title: string;
+  legend: LegendItem[];
+}
+const { img, alt, title, legend } = Astro.props;
+---
+<figure class="choropleth-card">
+  <Image
+    src={img}
+    alt={alt}
+    widths={[350, 700, 1050]}
+    sizes="(max-width: 640px) 100vw, 45vw"
+    format="webp"
+    quality={80}
+  />
+  <figcaption>
+    <p class="choropleth-title">{title}</p>
+    <ul class="choropleth-legend">
+      {legend.map((item) => (
+        <li>
+          <span class="swatch" style={`background:${item.color}`}></span>
+          {item.label}
+        </li>
+      ))}
+    </ul>
+  </figcaption>
+</figure>
+
+<style>
+  /* invariato rispetto a prima */
+</style>
