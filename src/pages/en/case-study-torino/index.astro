@@ -3,6 +3,11 @@ import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { base } from '../../../utils/base.js';
 import { Image } from 'astro:assets';
 import torinoRoadNetwork from '../../../assets/images/torino-road-network.png';
+
+import ChoroplethFigure from '../../../components/ChoroplethFigure.astro';
+import omiPrice from '../../../assets/images/omi-price.png';
+import istatUnder5 from '../../../assets/images/istat-under5.png';
+import istat2545 from '../../../assets/images/istat-25-45.png';
 ---
 <BaseLayout title="Torino: Relocation Suitability - Nico">
   <div class="page-container">
@@ -64,7 +69,41 @@ import torinoRoadNetwork from '../../../assets/images/torino-road-network.png';
           breaks, tested in parallel, since equal-interval classes failed
           to surface meaningful spatial variation in the data.
         </p>
-        <div class="image-placeholder">Choropleth maps — ISTAT / OMI</div>
+        <div class="choropleth-grid">
+          <ChoroplethFigure
+            img={omiPrice}
+            alt="Estimated monthly rent for an 80m² apartment, by OMI zone, Torino"
+            title="Estimated rent — 80m² apartment (OMI zones)"
+            legend={[
+              { color: '#D9AE4E', label: '< €664' },
+              { color: '#C67A2E', label: '€664–784' },
+              { color: '#A8442A', label: '€784–1,000' },
+              { color: '#7A2033', label: '> €1,000' },
+            ]}
+          />
+          <ChoroplethFigure
+            img={istatUnder5}
+            alt="ISTAT under-5 population share, Torino"
+            title="Population under 5 (%)"
+            legend={[
+              { color: '#C8D9C9', label: '< 3.1%' },
+              { color: '#8FAE90', label: '3.1–4.8%' },
+              { color: '#6B8C6E', label: '4.8–6.9%' },
+              { color: '#4F6B52', label: '> 6.9%' },
+            ]}
+          />
+          <ChoroplethFigure
+            img={istat2545}
+            alt="ISTAT population aged 25-45, Torino"
+            title="Population aged 25–45 (%)"
+            legend={[
+              { color: '#C8D9C9', label: '< 10%' },
+              { color: '#8FAE90', label: '10–26%' },
+              { color: '#6B8C6E', label: '26–56%' },
+              { color: '#4F6B52', label: '> 56%' },
+            ]}
+          />
+        </div>
       </article>
 
       <article class="step">
