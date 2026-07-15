@@ -86,10 +86,10 @@ import istat2545 from '../../../assets/images/istat-25-45.png';
             alt="ISTAT under-5 population share, Torino"
             title="Population under 5 (%)"
             legend={[
-              { color: '#C8D9C9', label: '< 3.1%' },
-              { color: '#8FAE90', label: '3.1–4.8%' },
-              { color: '#6B8C6E', label: '4.8–6.9%' },
-              { color: '#4F6B52', label: '> 6.9%' },
+              { color: '#C8D9C9', label: '< 2.2%' },
+              { color: '#8FAE90', label: '2.2–6.9%' },
+              { color: '#6B8C6E', label: '6.9–22.2%' },
+              { color: '#4F6B52', label: '> 22.2%' },
             ]}
           />
           <ChoroplethFigure
@@ -389,6 +389,16 @@ import istat2545 from '../../../assets/images/istat-25-45.png';
     color: var(--color-text-muted);
     margin-top: 0.5rem;
   }
-
+  .choropleth-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+  }
+  @media (max-width: 640px) {
+    .choropleth-grid {
+      grid-template-columns: 1fr;
+    }
+  }
   
 </style>

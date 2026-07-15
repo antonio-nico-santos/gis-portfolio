@@ -36,5 +36,47 @@ const { img, alt, title, legend } = Astro.props;
 </figure>
 
 <style>
-  /* invariato rispetto a prima */
+  .choropleth-card {
+    margin: 0;
+    background: var(--color-ink-light);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .choropleth-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .choropleth-card figcaption {
+    padding: 0.9rem 1rem;
+  }
+  .choropleth-title {
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.5rem;
+  }
+  .choropleth-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .choropleth-legend li {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted-2);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .swatch {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
 </style>
