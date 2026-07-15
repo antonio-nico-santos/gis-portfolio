@@ -8,6 +8,7 @@ import ChoroplethFigure from '../../../components/ChoroplethFigure.astro';
 import omiPrice from '../../../assets/images/omi-price.png';
 import istatUnder5 from '../../../assets/images/istat-under5.png';
 import istat2545 from '../../../assets/images/istat-25-45.png';
+import postiLavoro from '../../../assets/images/posti-lavoro.png';
 ---
 <BaseLayout title="Torino: Relocation Suitability - Nico">
   <div class="page-container">
@@ -104,7 +105,13 @@ import istat2545 from '../../../assets/images/istat-25-45.png';
             ]}
           />
         </div>
+        <figcaption class="map-source">
+          Data: ISTAT (2021 census) · Agenzia delle Entrate – Osservatorio del
+          Mercato Immobiliare (OMI) · Basemap: © OpenStreetMap contributors
+        </figcaption>
+
         <p>
+          
           This pattern didn't point to a single obvious concentration.
           Neighborhoods with a strong 25–45 presence often showed very few
           young children — more consistent with student or early-career
@@ -134,7 +141,23 @@ import istat2545 from '../../../assets/images/istat-25-45.png';
           one-way restrictions — adequate for regional-scale comparison,
           not for street-level routing.
         </p>
-        <div class="image-placeholder">Combined commute raster / scenario table</div>
+        <div class="commute-visuals">
+          <figure class="context-map">
+            <Image
+              src={postiLavoro}
+              alt="Location of the three work sites relative to Torino"
+              widths={[300, 500]}
+              sizes="(max-width: 640px) 100vw, 32vw"
+              format="webp"
+              quality={80}
+            />
+            <figcaption>The three sites, relative to Torino</figcaption>
+          </figure>
+
+          <div class="analysis-map">
+            <div class="image-placeholder">Combined commute raster / scenario table</div>
+          </div>
+        </div>
       </article>
 
       <article class="step">
@@ -408,5 +431,28 @@ import istat2545 from '../../../assets/images/istat-25-45.png';
       grid-template-columns: 1fr;
     }
   }
-  
+  .commute-visuals {
+    display: grid;
+    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+    gap: 1.5rem;
+    align-items: start;
+    margin: 1.5rem 0;
+  }
+  .context-map img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+  }
+  .context-map figcaption {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.4rem;
+  }
+  @media (max-width: 640px) {
+    .commute-visuals {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
