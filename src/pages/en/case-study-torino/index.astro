@@ -9,6 +9,7 @@ import omiPrice from '../../../assets/images/omi-price.png';
 import istatUnder5 from '../../../assets/images/istat-under5.png';
 import istat2545 from '../../../assets/images/istat-25-45.png';
 import postiLavoro from '../../../assets/images/posti-lavoro.png';
+import commuteIsochrone from '../../../assets/images/isochrone.png';
 ---
 <BaseLayout title="Torino: Relocation Suitability - Nico">
   <div class="page-container">
@@ -146,8 +147,8 @@ import postiLavoro from '../../../assets/images/posti-lavoro.png';
             <Image
               src={postiLavoro}
               alt="Location of the three work sites relative to Torino"
-              widths={[300, 500]}
-              sizes="(max-width: 640px) 100vw, 32vw"
+              widths={[400, 700, 1000]}
+              sizes="(max-width: 640px) 100vw, 45vw"
               format="webp"
               quality={80}
             />
@@ -155,7 +156,19 @@ import postiLavoro from '../../../assets/images/posti-lavoro.png';
           </figure>
 
           <div class="analysis-map">
-            <div class="image-placeholder">Combined commute raster / scenario table</div>
+            <div class="analysis-map">
+              <ChoroplethFigure
+                img={commuteIsochrone}
+                alt="Weighted weekly commute time to three work sites, Torino"
+                title="Weekly commute time (minutes)"
+                legend={[
+                  { color: '#D9AE4E', label: '< 200 min' },
+                  { color: '#C67A2E', label: '200–210 min' },
+                  { color: '#A8442A', label: '210–220 min' },
+                  { color: '#7A2033', label: '> 220 min' },
+                ]}
+              />
+            </div>
           </div>
         </div>
       </article>
@@ -419,6 +432,7 @@ import postiLavoro from '../../../assets/images/posti-lavoro.png';
     font-size: 0.75rem;
     color: var(--color-text-muted);
     margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
   }
   .choropleth-grid {
     display: grid;
@@ -431,9 +445,9 @@ import postiLavoro from '../../../assets/images/posti-lavoro.png';
       grid-template-columns: 1fr;
     }
   }
-  .commute-visuals {
+   .commute-visuals {
     display: grid;
-    grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+    grid-template-columns: minmax(280px, 1fr) minmax(0, 1.3fr);
     gap: 1.5rem;
     align-items: start;
     margin: 1.5rem 0;
