@@ -122,7 +122,9 @@ import commuteIsochrone from '../../../assets/images/isochrone.png';
           closely.
         </p>
 
-      <article class="step"> </article>
+        </article>
+
+      <article class="step">
         <h2>2. Commute isochrones to three work sites</h2>
         <p>
           My wife's job involved regular travel to three sites outside
@@ -142,35 +144,30 @@ import commuteIsochrone from '../../../assets/images/isochrone.png';
           one-way restrictions — adequate for regional-scale comparison,
           not for street-level routing.
         </p>
-        <div class="commute-visuals">
-          <figure class="context-map">
+        <div class="analysis-map-wrap">
+          <ChoroplethFigure
+            img={commuteIsochrone}
+            alt="Weighted weekly commute time to three work sites, Torino"
+            title="Weekly commute time (minutes)"
+            legend={[
+              { color: '#D9AE4E', label: '< 200 min' },
+              { color: '#C67A2E', label: '200–210 min' },
+              { color: '#A8442A', label: '210–220 min' },
+              { color: '#7A2033', label: '> 220 min' },
+            ]}
+          />
+          <figure class="locator-inset" title="The three work sites, relative to Torino">
             <Image
               src={postiLavoro}
               alt="Location of the three work sites relative to Torino"
-              widths={[400, 700, 1000]}
-              sizes="(max-width: 640px) 100vw, 45vw"
+              widths={[200, 300]}
+              sizes="140px"
               format="webp"
               quality={80}
             />
-            <figcaption>The three sites, relative to Torino</figcaption>
           </figure>
-
-          <div class="analysis-map">
-            <div class="analysis-map">
-              <ChoroplethFigure
-                img={commuteIsochrone}
-                alt="Weighted weekly commute time to three work sites, Torino"
-                title="Weekly commute time (minutes)"
-                legend={[
-                  { color: '#D9AE4E', label: '< 200 min' },
-                  { color: '#C67A2E', label: '200–210 min' },
-                  { color: '#A8442A', label: '210–220 min' },
-                  { color: '#7A2033', label: '> 220 min' },
-                ]}
-              />
-            </div>
-          </div>
         </div>
+        <figcaption class="map-source">Data: © OpenStreetMap contributors · Elevation: U.S. Geological Survey (SRTM)</figcaption>
       </article>
 
       <article class="step">
@@ -445,28 +442,52 @@ import commuteIsochrone from '../../../assets/images/isochrone.png';
       grid-template-columns: 1fr;
     }
   }
-   .commute-visuals {
-    display: grid;
-    grid-template-columns: minmax(280px, 1fr) minmax(0, 1.3fr);
-    gap: 1.5rem;
-    align-items: start;
+  .analysis-map-wrap {
+    position: relative;
+    width: min(145%, 58rem);
     margin: 1.5rem 0;
   }
-  .context-map img {
+  .analysis-map-wrap :global(.choropleth-card img) {
     width: 100%;
     height: auto;
     border-radius: 8px;
     display: block;
   }
-  .context-map figcaption {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    margin-top: 0.4rem;
+  .locator-inset {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    width: 130px;
+    margin: 0;
+    border: 1px solid rgba(198, 146, 20, 0.35);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+  .locator-inset img {
+    width: 100%;
+    height: auto;
+    display: block;
   }
   @media (max-width: 640px) {
-    .commute-visuals {
-      grid-template-columns: 1fr;
+    .analysis-map-wrap {
+      width: 100%;
+    }
+    .locator-inset {
+      width: 90px;
+      top: 0.5rem;
+      left: 0.5rem;
+    }
+  }
+  .hero-split,
+  .analysis-map-wrap {
+    width: 58rem;
+    max-width: 100%;
+  }
+  @media (max-width: 900px) {
+    .hero-split,
+    .analysis-map-wrap {
+      width: 100%;
     }
   }
 </style>
