@@ -10,6 +10,7 @@ import istatUnder5 from '../../../assets/images/istat-under5.png';
 import istat2545 from '../../../assets/images/istat-25-45.png';
 import postiLavoro from '../../../assets/images/posti-lavoro.png';
 import commuteIsochrone from '../../../assets/images/isochrone.png';
+import nidoProximity from '../../../assets/images/nido-proximity-dark.png';
 ---
 <BaseLayout title="Torino: Relocation Suitability - Nico">
   <div class="page-container">
@@ -202,18 +203,36 @@ import commuteIsochrone from '../../../assets/images/isochrone.png';
         <p>
           Using the pedestrian network (OSM footways, also via OSMnx) and
           QNEAT3's Iso-Area tools (Contours and Polygons, from Layer), I
-          mapped distance bands — 200 to 1200m in 200m increments — from
+          mapped distance bands — 200 to 1000m in 200m increments — from
           nurseries with confirmed availability.
         </p>
         <p class="callout">
           <strong>A deliberate methodological choice:</strong> distance
           instead of time. Walking time with a toddler is too variable to
-          be a reliable metric, so shortest-path distance was used
-          instead of the fastest-path time model applied to the commute
-          step above — a different metric for a different kind of
-          movement.
+          be a reliable metric, so shortest-path distance was used instead
+          of the fastest-path time model applied to the commute step above
+          — a different metric for a different kind of movement.
         </p>
-        <div class="image-placeholder">Distance-band map — nurseries</div>
+        <div class="analysis-map-wrap">
+          <ChoroplethFigure
+            img={nidoProximity}
+            alt="Walking-distance bands from nurseries with confirmed availability, Torino"
+            title="Distance to nursery (meters)"
+            legend={[
+              { color: '#D9AE4E', label: '200 m' },
+              { color: '#C67A2E', label: '400 m' },
+              { color: '#B85C29', label: '600 m' },
+              { color: '#A8442A', label: '800 m' },
+              { color: '#7A2033', label: '1000 m' },
+            ]}
+          />
+        </div>
+        <figcaption class="map-source">
+          Data: © OpenStreetMap contributors. Exact nursery coordinates,
+          sourced via Google Places API, aren't published here per
+          Google's terms of service — the map shows only the resulting
+          proximity bands.
+        </figcaption>
       </article>
 
       <article class="step">
