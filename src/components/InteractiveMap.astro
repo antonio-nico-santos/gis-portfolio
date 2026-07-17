@@ -1,0 +1,414 @@
+---
+// InteractiveMap.astro
+// MapLibre GL JS interactive choropleth for the Torino shortlist step.
+// No external basemap tiles are used — only our own GeoJSON zone polygons on
+// a flat dark background, consistent with the site's hand-built cartography
+// (same reasoning that ruled out CARTO for the static maps: see riepilogo
+// sessione 3, "Questioni di licenza/privacy"). This also means there is no
+// tile-server dependency or API key to manage.
+//
+// Data contract (GeoJSON FeatureCollection, one Polygon/MultiPolygon per zone):
+//   properties: {
+//     zone_name: string
+//     omi_class: "<664" | "664-784" | "784-1000" | ">1000"
+//     under5_class: "<2.2" | "2.2-6.9" | "6.9-22.2" | ">22.2"
+//     age2545_class: "<10" | "10-26" | "26-56" | ">56"
+//     commute_class: "<200" | "200-210" | "210-220" | ">220"
+//     nido_class: "200" | "400" | "600" | "800" | "1000"
+//     shortlisted: boolean
+//   }
+// Swap the file at `geojsonUrl` with the real OMI-zone aggregate export from
+// QGIS once ready — property names and class values must match the sets above
+// exactly, or update LAYERS in the script block to match your real classes.
+import { base } from '../utils/base.js';
+
+interface Props {
+  geojsonUrl?: string;
+}
+const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
+---
+
+<div class="analysis-map-wrap interactive-map-wrap">
+  <div class="interactive-map-card">
+    <div class="map-toolbar" id="map-toolbar" role="group" aria-label="Map layer selector"></div>
+    <div class="map-body">
+      <div id="torino-map" data-geojson-url={geojsonUrl}></div>
+      <div class="map-legend" id="map-legend"></div>
+      <div class="zone-panel" id="zone-panel">
+        <button class="close-btn" id="zone-panel-close" aria-label="Close">&times;</button>
+        <div id="zone-panel-content"></div>
+      </div>
+    </div>
+  </div>
+  <p class="map-source">
+    Zone boundaries and values are placeholders pending the real OMI-zone
+    export — see <code>technical.astro</code> for the aggregation method.
+    Nursery locations are never shown as points (Google Places API terms of
+    service); only zone-level proximity bands are shown.
+  </p>
+</div>
+
+<script>
+  import maplibregl from 'maplibre-gl';
+  import 'maplibre-gl/dist/maplibre-gl.css';
+
+  const LAYERS = {
+    omi_class: {
+      label: 'Rent (OMI)',
+      legendTitle: 'Estimated rent — 80m² (OMI zones)',
+      classes: [
+        { value: '<664', label: '< €664', color: '#D9AE4E' },
+        { value: '664-784', label: '€664–784', color: '#C67A2E' },
+        { value: '784-1000', label: '€784–1,000', color: '#A8442A' },
+        { value: '>1000', label: '> €1,000', color: '#7A2033' },
+      ],
+    },
+    under5_class: {
+      label: 'Pop. under 5',
+      legendTitle: 'Population under 5 (%)',
+      classes: [
+        { value: '<2.2', label: '< 2.2%', color: '#C8D9C9' },
+        { value: '2.2-6.9', label: '2.2–6.9%', color: '#8FAE90' },
+        { value: '6.9-22.2', label: '6.9–22.2%', color: '#6B8C6E' },
+        { value: '>22.2', label: '> 22.2%', color: '#4F6B52' },
+      ],
+    },
+    age2545_class: {
+      label: 'Pop. 25–45',
+      legendTitle: 'Population aged 25–45 (%)',
+      classes: [
+        { value: '<10', label: '< 10%', color: '#C8D9C9' },
+        { value: '10-26', label: '10–26%', color: '#8FAE90' },
+        { value: '26-56', label: '26–56%', color: '#6B8C6E' },
+        { value: '>56', label: '> 56%', color: '#4F6B52' },
+      ],
+    },
+    commute_class: {
+      label: 'Commute time',
+      legendTitle: 'Weekly commute time (minutes)',
+      classes: [
+        { value: '<200', label: '< 200 min', color: '#D9AE4E' },
+        { value: '200-210', label: '200–210 min', color: '#C67A2E' },
+        { value: '210-220', label: '210–220 min', color: '#A8442A' },
+        { value: '>220', label: '> 220 min', color: '#7A2033' },
+      ],
+    },
+    nido_class: {
+      label: 'Nursery distance',
+      legendTitle: 'Nearest available nursery (meters)',
+      classes: [
+        { value: '200', label: '200 m', color: '#D9AE4E' },
+        { value: '400', label: '400 m', color: '#C67A2E' },
+        { value: '600', label: '600 m', color: '#B85C29' },
+        { value: '800', label: '800 m', color: '#A8442A' },
+        { value: '1000', label: '1000 m', color: '#7A2033' },
+      ],
+    },
+  };
+  const LAYER_ORDER = ['omi_class', 'under5_class', 'age2545_class', 'commute_class', 'nido_class'];
+
+  function initInteractiveMap(container) {
+    let activeLayer = 'omi_class';
+    const mapEl = container.querySelector('#torino-map');
+    const toolbarEl = container.querySelector('#map-toolbar');
+    const legendEl = container.querySelector('#map-legend');
+    const panelEl = container.querySelector('#zone-panel');
+    const panelContentEl = container.querySelector('#zone-panel-content');
+    const panelCloseEl = container.querySelector('#zone-panel-close');
+    const geojsonUrl = mapEl.dataset.geojsonUrl;
+
+    function buildMatchExpression(layerKey) {
+      const cfg = LAYERS[layerKey];
+      const expr = ['match', ['get', layerKey]];
+      cfg.classes.forEach((c) => expr.push(c.value, c.color));
+      expr.push('#3a4a5c'); // fallback for missing/unclassified zones
+      return expr;
+    }
+
+    function labelFor(layerKey, value) {
+      const cls = LAYERS[layerKey].classes.find((c) => c.value === value);
+      return cls ? cls.label : value;
+    }
+
+    function renderToolbar() {
+      toolbarEl.innerHTML = '';
+      LAYER_ORDER.forEach((key) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'layer-btn' + (key === activeLayer ? ' active' : '');
+        btn.textContent = LAYERS[key].label;
+        btn.setAttribute('aria-pressed', String(key === activeLayer));
+        btn.addEventListener('click', () => setActiveLayer(key));
+        toolbarEl.appendChild(btn);
+      });
+    }
+
+    function renderLegend() {
+      const cfg = LAYERS[activeLayer];
+      let html = `<p class="map-legend-title">${cfg.legendTitle}</p><ul>`;
+      cfg.classes.forEach((c) => {
+        html += `<li><span class="swatch" style="background:${c.color}"></span>${c.label}</li>`;
+      });
+      html += `<li><span class="shortlist-line"></span>Shortlisted zone</li></ul>`;
+      legendEl.innerHTML = html;
+    }
+
+    function showPanel(props) {
+      panelContentEl.innerHTML = `
+        <h3>${props.zone_name}</h3>
+        <dl>
+          <dt>Rent (OMI)</dt><dd>${labelFor('omi_class', props.omi_class)}</dd>
+          <dt>Pop. under 5</dt><dd>${labelFor('under5_class', props.under5_class)}</dd>
+          <dt>Pop. 25–45</dt><dd>${labelFor('age2545_class', props.age2545_class)}</dd>
+          <dt>Commute time</dt><dd>${labelFor('commute_class', props.commute_class)}</dd>
+          <dt>Nursery distance</dt><dd>${labelFor('nido_class', props.nido_class)}</dd>
+        </dl>
+        ${props.shortlisted ? '<span class="shortlist-tag">Shortlisted</span>' : ''}
+      `;
+      panelEl.classList.add('visible');
+    }
+    panelCloseEl.addEventListener('click', () => panelEl.classList.remove('visible'));
+
+    const map = new maplibregl.Map({
+      container: mapEl,
+      style: {
+        version: 8,
+        sources: {},
+        layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#16283A' } }],
+      },
+      center: [7.6869, 45.0703], // Torino, per project coordinates
+      zoom: 12.2,
+      attributionControl: false,
+    });
+
+    function setActiveLayer(key) {
+      activeLayer = key;
+      renderToolbar();
+      renderLegend();
+      if (map.getLayer('zones-fill')) {
+        map.setPaintProperty('zones-fill', 'fill-color', buildMatchExpression(activeLayer));
+      }
+    }
+
+    map.on('load', async () => {
+      const res = await fetch(geojsonUrl);
+      const geojson = await res.json();
+
+      map.addSource('zones', { type: 'geojson', data: geojson });
+
+      map.addLayer({
+        id: 'zones-fill',
+        type: 'fill',
+        source: 'zones',
+        paint: { 'fill-color': buildMatchExpression(activeLayer), 'fill-opacity': 0.85 },
+      });
+
+      map.addLayer({
+        id: 'zones-outline',
+        type: 'line',
+        source: 'zones',
+        paint: { 'line-color': '#EDE6D3', 'line-width': 0.75, 'line-opacity': 0.4 },
+      });
+
+      // Drawn last so it renders on top of fills/outlines. Note: adjacent
+      // shortlisted zones share a border, which is correct (each zone's own
+      // edge is real) but can visually read as one merged shape — acceptable
+      // here since "several adjoining shortlisted zones" is an accurate story.
+      map.addLayer({
+        id: 'zones-shortlist',
+        type: 'line',
+        source: 'zones',
+        filter: ['==', ['get', 'shortlisted'], true],
+        paint: { 'line-color': '#C69214', 'line-width': 3 },
+      });
+
+      map.on('mouseenter', 'zones-fill', () => (map.getCanvas().style.cursor = 'pointer'));
+      map.on('mouseleave', 'zones-fill', () => (map.getCanvas().style.cursor = ''));
+      map.on('click', 'zones-fill', (e) => showPanel(e.features[0].properties));
+    });
+
+    renderToolbar();
+    renderLegend();
+  }
+
+  document.querySelectorAll('.interactive-map-wrap').forEach((el) => initInteractiveMap(el));
+</script>
+
+<style>
+  /* Breakout width + source citation replicated here (not inherited from the
+     parent page's scoped <style>) so this component is self-contained and
+     safe to drop into any page. Keep these two rules in sync with the
+     equivalent .analysis-map-wrap / .map-source rules in index.astro if the
+     site's breakout pattern changes. */
+  .analysis-map-wrap {
+    width: 58rem;
+    max-width: 100%;
+    margin: 1.5rem 0;
+  }
+  @media (max-width: 900px) {
+    .analysis-map-wrap {
+      width: 100%;
+    }
+  }
+  .map-source {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .interactive-map-card {
+    background: var(--color-ink-light);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(198, 146, 20, 0.15);
+  }
+  .map-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(198, 146, 20, 0.15);
+  }
+  .layer-btn {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    background: transparent;
+    color: var(--color-text-muted-2);
+    border: 1px solid rgba(159, 173, 185, 0.3);
+    border-radius: 4px;
+    padding: 0.4rem 0.65rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .layer-btn:hover {
+    color: var(--color-paper);
+    border-color: var(--color-brass);
+  }
+  .layer-btn.active {
+    background: var(--color-brass);
+    color: var(--color-ink);
+    border-color: var(--color-brass);
+    font-weight: 600;
+  }
+  .map-body {
+    position: relative;
+    display: flex;
+  }
+  #torino-map {
+    width: 100%;
+    height: 480px;
+  }
+  .map-legend {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    background: rgba(22, 40, 58, 0.9);
+    backdrop-filter: blur(3px);
+    border-radius: 6px;
+    padding: 0.7rem 0.9rem;
+    border: 1px solid rgba(198, 146, 20, 0.2);
+    max-width: 220px;
+  }
+  .map-legend-title {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.45rem;
+  }
+  .map-legend ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .map-legend li {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--color-text-muted-2);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .map-legend .swatch {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .map-legend .shortlist-line {
+    width: 0.9rem;
+    height: 2px;
+    background: var(--color-brass);
+    flex-shrink: 0;
+  }
+  .zone-panel {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 220px;
+    background: rgba(22, 40, 58, 0.95);
+    border: 1px solid rgba(198, 146, 20, 0.3);
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    display: none;
+  }
+  .zone-panel.visible {
+    display: block;
+  }
+  .zone-panel h3 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    color: var(--color-brass);
+    margin: 0 0 0.6rem;
+  }
+  .zone-panel dl {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+  }
+  .zone-panel dt {
+    color: var(--color-text-muted);
+    margin-top: 0.4rem;
+  }
+  .zone-panel dd {
+    margin: 0;
+    color: var(--color-paper);
+  }
+  .zone-panel .shortlist-tag {
+    display: inline-block;
+    margin-top: 0.6rem;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    background: var(--color-brass);
+    color: var(--color-ink);
+    padding: 0.15rem 0.45rem;
+    border-radius: 3px;
+  }
+  .zone-panel .close-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  @media (max-width: 640px) {
+    #torino-map {
+      height: 380px;
+    }
+    .zone-panel {
+      width: 170px;
+      font-size: 0.9em;
+    }
+  }
+</style>

@@ -11,6 +11,7 @@ import istat2545 from '../../../assets/images/istat-25-45.png';
 import postiLavoro from '../../../assets/images/posti-lavoro.png';
 import commuteIsochrone from '../../../assets/images/isochrone.png';
 import nidoProximity from '../../../assets/images/nido-proximity-dark.png';
+import InteractiveMap from '../../../components/InteractiveMap.astro';
 ---
 <BaseLayout title="Torino: Relocation Suitability - Nico">
   <div class="page-container">
@@ -250,6 +251,8 @@ import nidoProximity from '../../../assets/images/nido-proximity-dark.png';
           out once the data showed too few nursery vacancies and
           apartment listings to work with.
         </p>
+
+        <InteractiveMap />
       </article>
 
       <article class="step">

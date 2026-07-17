@@ -1,0 +1,395 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Aurora",
+        "omi_class": "<664",
+        "under5_class": "6.9-22.2",
+        "age2545_class": ">56",
+        "commute_class": "200-210",
+        "nido_class": "600",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6863,
+              45.0418
+            ],
+            [
+              7.7103,
+              45.0418
+            ],
+            [
+              7.7103,
+              45.0608
+            ],
+            [
+              7.6863,
+              45.0608
+            ],
+            [
+              7.6863,
+              45.0418
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Vanchiglia",
+        "omi_class": "784-1000",
+        "under5_class": "2.2-6.9",
+        "age2545_class": ">56",
+        "commute_class": "210-220",
+        "nido_class": "400",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.7103,
+              45.0418
+            ],
+            [
+              7.7319,
+              45.0418
+            ],
+            [
+              7.7319,
+              45.0608
+            ],
+            [
+              7.7103,
+              45.0608
+            ],
+            [
+              7.7103,
+              45.0418
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Centro",
+        "omi_class": ">1000",
+        "under5_class": "2.2-6.9",
+        "age2545_class": ">56",
+        "commute_class": "200-210",
+        "nido_class": "600",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6623,
+              45.0418
+            ],
+            [
+              7.6863,
+              45.0418
+            ],
+            [
+              7.6863,
+              45.0608
+            ],
+            [
+              7.6623,
+              45.0608
+            ],
+            [
+              7.6623,
+              45.0418
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Cenisia",
+        "omi_class": "784-1000",
+        "under5_class": "2.2-6.9",
+        "age2545_class": "26-56",
+        "commute_class": "200-210",
+        "nido_class": "600",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6419,
+              45.0608
+            ],
+            [
+              7.6623,
+              45.0608
+            ],
+            [
+              7.6623,
+              45.0808
+            ],
+            [
+              7.6419,
+              45.0808
+            ],
+            [
+              7.6419,
+              45.0608
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Crocetta",
+        "omi_class": ">1000",
+        "under5_class": "6.9-22.2",
+        "age2545_class": "26-56",
+        "commute_class": "<200",
+        "nido_class": "400",
+        "shortlisted": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6623,
+              45.0608
+            ],
+            [
+              7.6863,
+              45.0608
+            ],
+            [
+              7.6863,
+              45.0808
+            ],
+            [
+              7.6623,
+              45.0808
+            ],
+            [
+              7.6623,
+              45.0608
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "San Salvario",
+        "omi_class": "664-784",
+        "under5_class": "6.9-22.2",
+        "age2545_class": "26-56",
+        "commute_class": "<200",
+        "nido_class": "200",
+        "shortlisted": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6863,
+              45.0608
+            ],
+            [
+              7.7103,
+              45.0608
+            ],
+            [
+              7.7103,
+              45.0808
+            ],
+            [
+              7.6863,
+              45.0808
+            ],
+            [
+              7.6863,
+              45.0608
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Barriera di Milano",
+        "omi_class": "<664",
+        "under5_class": ">22.2",
+        "age2545_class": "10-26",
+        "commute_class": ">220",
+        "nido_class": "800",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.7103,
+              45.0608
+            ],
+            [
+              7.7319,
+              45.0608
+            ],
+            [
+              7.7319,
+              45.0808
+            ],
+            [
+              7.7103,
+              45.0808
+            ],
+            [
+              7.7103,
+              45.0608
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Santa Rita",
+        "omi_class": "664-784",
+        "under5_class": "6.9-22.2",
+        "age2545_class": "26-56",
+        "commute_class": "<200",
+        "nido_class": "200",
+        "shortlisted": true
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6623,
+              45.0808
+            ],
+            [
+              7.6863,
+              45.0808
+            ],
+            [
+              7.6863,
+              45.0988
+            ],
+            [
+              7.6623,
+              45.0988
+            ],
+            [
+              7.6623,
+              45.0808
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Mirafiori Nord",
+        "omi_class": "<664",
+        "under5_class": "6.9-22.2",
+        "age2545_class": "10-26",
+        "commute_class": "200-210",
+        "nido_class": "800",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.6863,
+              45.0808
+            ],
+            [
+              7.7103,
+              45.0808
+            ],
+            [
+              7.7103,
+              45.0988
+            ],
+            [
+              7.6863,
+              45.0988
+            ],
+            [
+              7.6863,
+              45.0808
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_name": "Lingotto",
+        "omi_class": "664-784",
+        "under5_class": "2.2-6.9",
+        "age2545_class": "10-26",
+        "commute_class": "210-220",
+        "nido_class": "1000",
+        "shortlisted": false
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              7.7103,
+              45.0808
+            ],
+            [
+              7.7319,
+              45.0808
+            ],
+            [
+              7.7319,
+              45.0988
+            ],
+            [
+              7.7103,
+              45.0988
+            ],
+            [
+              7.7103,
+              45.0808
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
