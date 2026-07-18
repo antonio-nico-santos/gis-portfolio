@@ -7,32 +7,67 @@
 // sessione 3, "Questioni di licenza/privacy"). This also means there is no
 // tile-server dependency or API key to manage.
 //
-// Data contract (GeoJSON FeatureCollection, one Polygon/MultiPolygon per zone):
+// Data contract, zones (GeoJSON FeatureCollection, one Polygon/MultiPolygon per zone):
 //   properties: {
 //     zone_name: string
 //     omi_class: "<664" | "664-784" | "784-1000" | ">1000"
 //     under5_class: "<2.2" | "2.2-6.9" | "6.9-22.2" | ">22.2"
 //     age2545_class: "<10" | "10-26" | "26-56" | ">56"
 //     commute_class: "<200" | "200-210" | "210-220" | ">220"
-//     nido_class: "200" | "400" | "600" | "800" | "1000"
 //     shortlisted: boolean
 //   }
 // Swap the file at `geojsonUrl` with the real OMI-zone aggregate export from
 // QGIS once ready — property names and class values must match the sets above
 // exactly, or update LAYERS in the script block to match your real classes.
+//
+// Nursery proximity is intentionally NOT one of the toggleable zone layers.
+// It was a hard exclusion filter applied before the shortlisting step (see
+// index.astro Step 4-5 narrative), and its native resolution is a continuous
+// isoline surface, not a per-zone summary — flattening it into one class per
+// (fairly large) OMI zone both produced coverage gaps and hid the within-zone
+// variability that made the static Step 4 map worth publishing in the first
+// place. Instead it's shown here as `nidoContoursUrl`, a non-interactive
+// context layer of the same isolines already used in the static map — no
+// aggregation, no data loss, always visible regardless of which toggleable
+// layer is active. Rivers (`riversLinesUrl` / `riversPolygonsUrl`) are the
+// other non-interactive context layer, purely for geographic orientation.
+//
+// Data contract, rivers (two files — split LineString vs Polygon/MultiPolygon
+// the same way the OSMnx water extraction already does for the static maps):
+//   riversLinesUrl:    FeatureCollection of LineString (watercourses)
+//   riversPolygonsUrl: FeatureCollection of Polygon/MultiPolygon (basins, wide reaches)
+//   no required properties — geometry only, rendered in a single flat color
+//
+// Data contract, nido contours (FeatureCollection of LineString isolines):
+//   properties: { value: 200 | 400 | 600 | 800 | 1000 }  (meters, matches the
+//   exact bands already published in the static Step 4 map)
 import { base } from '../utils/base.js';
 
 interface Props {
   geojsonUrl?: string;
+  riversLinesUrl?: string;
+  riversPolygonsUrl?: string;
+  nidoContoursUrl?: string;
 }
-const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
+const {
+  geojsonUrl = `${base}/data/torino-zones-mock.geojson`,
+  riversLinesUrl = `${base}/data/torino-rivers-lines-mock.geojson`,
+  riversPolygonsUrl = `${base}/data/torino-rivers-polygons-mock.geojson`,
+  nidoContoursUrl = `${base}/data/torino-nido-contours-mock.geojson`,
+} = Astro.props;
 ---
 
 <div class="analysis-map-wrap interactive-map-wrap">
   <div class="interactive-map-card">
     <div class="map-toolbar" id="map-toolbar" role="group" aria-label="Map layer selector"></div>
     <div class="map-body">
-      <div id="torino-map" data-geojson-url={geojsonUrl}></div>
+      <div
+        id="torino-map"
+        data-geojson-url={geojsonUrl}
+        data-rivers-lines-url={riversLinesUrl}
+        data-rivers-polygons-url={riversPolygonsUrl}
+        data-nido-contours-url={nidoContoursUrl}
+      ></div>
       <div class="map-legend" id="map-legend"></div>
       <div class="zone-panel" id="zone-panel">
         <button class="close-btn" id="zone-panel-close" aria-label="Close">&times;</button>
@@ -44,7 +79,8 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
     Zone boundaries and values are placeholders pending the real OMI-zone
     export — see <code>technical.astro</code> for the aggregation method.
     Nursery locations are never shown as points (Google Places API terms of
-    service); only zone-level proximity bands are shown.
+    service); only the same aggregated isolines from the static map are shown
+    here, as context.
   </p>
 </div>
 
@@ -93,19 +129,15 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
         { value: '>220', label: '> 220 min', color: '#7A2033' },
       ],
     },
-    nido_class: {
-      label: 'Nursery distance',
-      legendTitle: 'Nearest available nursery (meters)',
-      classes: [
-        { value: '200', label: '200 m', color: '#D9AE4E' },
-        { value: '400', label: '400 m', color: '#C67A2E' },
-        { value: '600', label: '600 m', color: '#B85C29' },
-        { value: '800', label: '800 m', color: '#A8442A' },
-        { value: '1000', label: '1000 m', color: '#7A2033' },
-      ],
-    },
   };
-  const LAYER_ORDER = ['omi_class', 'under5_class', 'age2545_class', 'commute_class', 'nido_class'];
+  const LAYER_ORDER = ['omi_class', 'under5_class', 'age2545_class', 'commute_class'];
+
+  // Context layers, always visible regardless of the active toggleable
+  // layer — see the frontmatter comment for why nido isolines live here
+  // instead of being a fifth zone class. Same 5-step scale already
+  // published on the static Step 4 map, reused for visual consistency.
+  const NIDO_CONTOUR_COLORS = ['match', ['get', 'value'], 200, '#D9AE4E', 400, '#C67A2E', 600, '#B85C29', 800, '#A8442A', 1000, '#7A2033', '#3a4a5c'];
+  const COLOR_WATER = '#4A6B7A';
 
   function initInteractiveMap(container) {
     let activeLayer = 'omi_class';
@@ -116,6 +148,9 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
     const panelContentEl = container.querySelector('#zone-panel-content');
     const panelCloseEl = container.querySelector('#zone-panel-close');
     const geojsonUrl = mapEl.dataset.geojsonUrl;
+    const riversLinesUrl = mapEl.dataset.riversLinesUrl;
+    const riversPolygonsUrl = mapEl.dataset.riversPolygonsUrl;
+    const nidoContoursUrl = mapEl.dataset.nidoContoursUrl;
 
     function buildMatchExpression(layerKey) {
       const cfg = LAYERS[layerKey];
@@ -150,6 +185,7 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
         html += `<li><span class="swatch" style="background:${c.color}"></span>${c.label}</li>`;
       });
       html += `<li><span class="shortlist-line"></span>Shortlisted zone</li></ul>`;
+      html += `<p class="context-note">Context: rivers, nursery-distance isolines (200–1000m)</p>`;
       legendEl.innerHTML = html;
     }
 
@@ -161,7 +197,6 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
           <dt>Pop. under 5</dt><dd>${labelFor('under5_class', props.under5_class)}</dd>
           <dt>Pop. 25–45</dt><dd>${labelFor('age2545_class', props.age2545_class)}</dd>
           <dt>Commute time</dt><dd>${labelFor('commute_class', props.commute_class)}</dd>
-          <dt>Nursery distance</dt><dd>${labelFor('nido_class', props.nido_class)}</dd>
         </dl>
         ${props.shortlisted ? '<span class="shortlist-tag">Shortlisted</span>' : ''}
       `;
@@ -191,11 +226,14 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
     }
 
     map.on('load', async () => {
-      const res = await fetch(geojsonUrl);
-      const geojson = await res.json();
+      const [geojson, riversLines, riversPolygons, nidoContours] = await Promise.all(
+        [geojsonUrl, riversLinesUrl, riversPolygonsUrl, nidoContoursUrl].map((url) =>
+          fetch(url).then((r) => r.json())
+        )
+      );
 
+      // 1. Zone fills — the interactive, toggleable choropleth.
       map.addSource('zones', { type: 'geojson', data: geojson });
-
       map.addLayer({
         id: 'zones-fill',
         type: 'fill',
@@ -203,17 +241,46 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
         paint: { 'fill-color': buildMatchExpression(activeLayer), 'fill-opacity': 0.85 },
       });
 
+      // 2. Rivers — non-interactive context, drawn ON TOP of the fill (opacity
+      // 0.85 above would otherwise hide anything underneath it) but below the
+      // zone/shortlist outlines so it never competes with the actual data.
+      map.addSource('rivers-polygons', { type: 'geojson', data: riversPolygons });
+      map.addLayer({
+        id: 'rivers-fill',
+        type: 'fill',
+        source: 'rivers-polygons',
+        paint: { 'fill-color': COLOR_WATER, 'fill-opacity': 0.35 },
+      });
+      map.addSource('rivers-lines', { type: 'geojson', data: riversLines });
+      map.addLayer({
+        id: 'rivers-line',
+        type: 'line',
+        source: 'rivers-lines',
+        paint: { 'line-color': COLOR_WATER, 'line-width': 1.5, 'line-opacity': 0.7 },
+      });
+
+      // 3. Nursery-distance isolines — non-interactive context, see the
+      // frontmatter comment for why this replaced the earlier nido_class
+      // toggleable layer.
+      map.addSource('nido-contours', { type: 'geojson', data: nidoContours });
+      map.addLayer({
+        id: 'nido-contours',
+        type: 'line',
+        source: 'nido-contours',
+        paint: { 'line-color': NIDO_CONTOUR_COLORS, 'line-width': 1.25, 'line-opacity': 0.65 },
+      });
+
+      // 4. Zone outlines + persistent shortlist outline — topmost, always
+      // legible over the context layers above. Note: adjacent shortlisted
+      // zones share a border, which is correct (each zone's own edge is
+      // real) but can visually read as one merged shape — acceptable here
+      // since "several adjoining shortlisted zones" is an accurate story.
       map.addLayer({
         id: 'zones-outline',
         type: 'line',
         source: 'zones',
         paint: { 'line-color': '#EDE6D3', 'line-width': 0.75, 'line-opacity': 0.4 },
       });
-
-      // Drawn last so it renders on top of fills/outlines. Note: adjacent
-      // shortlisted zones share a border, which is correct (each zone's own
-      // edge is real) but can visually read as one merged shape — acceptable
-      // here since "several adjoining shortlisted zones" is an accurate story.
       map.addLayer({
         id: 'zones-shortlist',
         type: 'line',
@@ -346,6 +413,14 @@ const { geojsonUrl = `${base}/data/torino-zones-mock.geojson` } = Astro.props;
     height: 2px;
     background: var(--color-brass);
     flex-shrink: 0;
+  }
+  .map-legend .context-note {
+    margin: 0.5rem 0 0;
+    padding-top: 0.45rem;
+    border-top: 1px solid rgba(159, 173, 185, 0.15);
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--color-text-muted);
   }
   .zone-panel {
     position: absolute;
