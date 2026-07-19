@@ -105,7 +105,7 @@ const {
   <p class="map-source">
     Rent estimates: Agenzia delle Entrate — Osservatorio del Mercato
     Immobiliare (OMI). Demographics: ISTAT (2021 census), aggregated from
-    census-section to OMI-zone level — see <code>technical.astro</code> for
+    census-section to OMI-zone level — see <a href={`${base}/en/case-study-torino/technical/`}><code>technical.astro</code></a> for
     the method. Road network / commute times and rivers: © OpenStreetMap
     contributors. Nursery locations are never shown as points (Google Places
     API terms of service); only the same aggregated distance isolines from
@@ -246,19 +246,20 @@ const {
       legendEl.innerHTML = html;
     }
 
-    const PANEL_PLACEHOLDER = '<p class="zone-panel-placeholder">Click a zone on the map to see its details here.</p>';
+    const PANEL_PLACEHOLDER =
+      '<p class="zone-panel-placeholder">Click a zone on the map to see its details here.</p>';
 
     function showPanel(props) {
       panelContentEl.innerHTML = `
-        <h3>${props.zone_name}</h3>
-        <dl>
-          <dt>Rent (OMI)</dt><dd>${labelFor('omi_class', props.omi_class)}</dd>
-          <dt>Pop. under 5</dt><dd>${labelFor('under5_class', props.under5_class)}</dd>
-          <dt>Pop. 25–45</dt><dd>${labelFor('age2545_class', props.age2545_class)}</dd>
-          <dt>Commute time</dt><dd>${labelFor('commute_class', props.commute_class)}</dd>
-        </dl>
-        ${props.shortlisted ? '<span class="shortlist-tag">Shortlisted</span>' : ''}
-      `;
+          <h3>${props.zone_name}</h3>
+          <dl>
+            <dt>Rent (OMI)</dt><dd>${labelFor('omi_class', props.omi_class)}</dd>
+            <dt>Pop. under 5</dt><dd>${labelFor('under5_class', props.under5_class)}</dd>
+            <dt>Pop. 25–45</dt><dd>${labelFor('age2545_class', props.age2545_class)}</dd>
+            <dt>Commute time</dt><dd>${labelFor('commute_class', props.commute_class)}</dd>
+          </dl>
+          ${props.shortlisted ? '<span class="shortlist-tag">Shortlisted</span>' : ''}
+        `;
     }
     panelContentEl.innerHTML = PANEL_PLACEHOLDER;
 
@@ -272,23 +273,17 @@ const {
       setSelectedZone('');
     });
 
-    const map = new maplibregl.Map({
-      container: mapEl,
-      style: {
-        version: 8,
-        sources: {},
-        layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#16283A' } }],
-      },
-      center: [7.6869, 45.0703], // Torino, per project coordinates
-      zoom: 12.2,
-      attributionControl: false,
-    });
+    // `map` e' assegnata dentro boot(), dopo aver gia' recuperato i dati (vedi
+    // sotto il motivo) — dichiarata qui con `let` cosi' setActiveLayer puo'
+    // riferirla anche se viene chiamata (dal click sulla toolbar) prima che
+    // boot() abbia finito.
+    let map;
 
     function setActiveLayer(key) {
       activeLayer = key;
       renderToolbar();
       renderLegend();
-      if (map.getLayer('zones-fill')) {
+      if (map && map.getLayer('zones-fill')) {
         map.setPaintProperty('zones-fill', 'fill-color', buildMatchExpression(activeLayer));
       }
     }
@@ -311,7 +306,44 @@ const {
       }
     }
 
-    map.on('load', async () => {
+    // Bounding box di TUTTE le geometrie (Polygon/MultiPolygon) nel
+    // FeatureCollection delle zone — usato per inquadrare la mappa
+    // sull'estensione reale dei dati invece che su un centro/zoom fisso
+    // scelto a mano. Ritorna null se il file e' vuoto/non caricato (fetch
+    // fallita), cosi' si puo' ripiegare sul centro fisso come fallback.
+    function computeBounds(geojson) {
+      let minLng = Infinity;
+      let minLat = Infinity;
+      let maxLng = -Infinity;
+      let maxLat = -Infinity;
+      function visit(coords) {
+        if (typeof coords[0] === 'number') {
+          const [lng, lat] = coords;
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+        } else {
+          coords.forEach(visit);
+        }
+      }
+      (geojson.features || []).forEach((f) => {
+        if (f.geometry && f.geometry.coordinates) visit(f.geometry.coordinates);
+      });
+      return Number.isFinite(minLng)
+        ? [
+            [minLng, minLat],
+            [maxLng, maxLat],
+          ]
+        : null;
+    }
+
+    // Dati recuperati PRIMA di creare la mappa (non dopo, dentro 'load' come
+    // in precedenza) apposta: serve il bounding box delle zone gia' pronto
+    // per passarlo alla creazione stessa della mappa (`bounds` invece di
+    // `center`/`zoom` fissi) — cosi' non c'e' nessun istante visibile sul
+    // vecchio centro fisso prima dello zoom corretto sui dati reali.
+    async function boot() {
       const [geojson, riversLines, riversPolygons, nidoContours] = await Promise.all([
         fetchGeoJSON(geojsonUrl, 'zone'),
         fetchGeoJSON(riversLinesUrl, 'fiumi (linee)'),
@@ -322,84 +354,123 @@ const {
       // Diagnostica: quante zone nel file caricato hanno shortlisted:true.
       // Non pilota piu' nessun contorno sulla mappa (vedi sotto), resta utile
       // solo per il tag "Shortlisted" nel pannello dettaglio al click.
-      const shortlistedCount = geojson.features.filter((f) => f.properties.shortlisted === true).length;
-      console.log(`[InteractiveMap] zone con shortlisted=true nel file caricato: ${shortlistedCount}`);
+      const shortlistedCount = geojson.features.filter(
+        (f) => f.properties.shortlisted === true,
+      ).length;
+      console.log(
+        `[InteractiveMap] zone con shortlisted=true nel file caricato: ${shortlistedCount}`,
+      );
 
-      // 1. Zone fills — the interactive, toggleable choropleth.
-      map.addSource('zones', { type: 'geojson', data: geojson });
-      map.addLayer({
-        id: 'zones-fill',
-        type: 'fill',
-        source: 'zones',
-        paint: { 'fill-color': buildMatchExpression(activeLayer), 'fill-opacity': 0.85 },
-      });
+      const bounds = computeBounds(geojson);
+      if (!bounds) {
+        console.warn(
+          "[InteractiveMap] impossibile calcolare l'estensione delle zone — uso il centro fisso di fallback.",
+        );
+      }
 
-      // 2. Rivers — non-interactive context, drawn ON TOP of the fill (opacity
-      // 0.85 above would otherwise hide anything underneath it) but below the
-      // zone outline / selected-zone highlight so it never competes with the
-      // actual data.
-      map.addSource('rivers-polygons', { type: 'geojson', data: riversPolygons });
-      map.addLayer({
-        id: 'rivers-fill',
-        type: 'fill',
-        source: 'rivers-polygons',
-        paint: { 'fill-color': COLOR_WATER, 'fill-opacity': 0.35 },
-      });
-      map.addSource('rivers-lines', { type: 'geojson', data: riversLines });
-      map.addLayer({
-        id: 'rivers-line',
-        type: 'line',
-        source: 'rivers-lines',
-        paint: { 'line-color': COLOR_WATER, 'line-width': 1.5, 'line-opacity': 0.7 },
-      });
-
-      // 3. Nursery-distance isolines — non-interactive context, see the
-      // frontmatter comment for why this replaced the earlier nido_class
-      // toggleable layer.
-      map.addSource('nido-contours', { type: 'geojson', data: nidoContours });
-      map.addLayer({
-        id: 'nido-contours',
-        type: 'line',
-        source: 'nido-contours',
-        paint: { 'line-color': NIDO_CONTOUR_COLORS, 'line-width': 1.25, 'line-opacity': 0.65 },
-      });
-
-      // 4. Zone outlines — thin, always-on boundary for every zone.
-      map.addLayer({
-        id: 'zones-outline',
-        type: 'line',
-        source: 'zones',
-        paint: { 'line-color': '#EDE6D3', 'line-width': 0.75, 'line-opacity': 0.4 },
-      });
-
-      // 5. Evidenziazione della zona selezionata — nessun contorno fisso
-      // sulla mappa (rimosso su richiesta di Nico dopo due iterazioni: prima
-      // per-zona su shortlisted, poi dissolto). Un solo layer con filtro
-      // aggiornato a ogni click: '' come valore iniziale non fa match con
-      // nessuna zona reale, quindi non compare nulla finche' non clicchi.
-      map.addLayer({
-        id: 'zones-selected-outline',
-        type: 'line',
-        source: 'zones',
-        filter: ['==', ['get', 'zone_name'], ''],
-        paint: { 'line-color': '#C69214', 'line-width': 3 },
-      });
-
-      setSelectedZone = (zoneName) => {
-        map.setFilter('zones-selected-outline', ['==', ['get', 'zone_name'], zoneName || '']);
+      const mapOptions = {
+        container: mapEl,
+        style: {
+          version: 8,
+          sources: {},
+          layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#16283A' } }],
+        },
+        attributionControl: false,
       };
+      if (bounds) {
+        mapOptions.bounds = bounds;
+        mapOptions.fitBoundsOptions = { padding: 40 };
+      } else {
+        mapOptions.center = [7.6869, 45.0703]; // Torino, fallback se le zone non si caricano
+        mapOptions.zoom = 12.2;
+      }
+      map = new maplibregl.Map(mapOptions);
 
-      map.on('mouseenter', 'zones-fill', () => (map.getCanvas().style.cursor = 'pointer'));
-      map.on('mouseleave', 'zones-fill', () => (map.getCanvas().style.cursor = ''));
-      map.on('click', 'zones-fill', (e) => {
-        const props = e.features[0].properties;
-        showPanel(props);
-        setSelectedZone(props.zone_name);
+      map.on('load', () => {
+        // 1. Zone fills — the interactive, toggleable choropleth.
+        map.addSource('zones', { type: 'geojson', data: geojson });
+        map.addLayer({
+          id: 'zones-fill',
+          type: 'fill',
+          source: 'zones',
+          paint: { 'fill-color': buildMatchExpression(activeLayer), 'fill-opacity': 0.85 },
+        });
+
+        // 2. Rivers — non-interactive context, drawn ON TOP of the fill (opacity
+        // 0.85 above would otherwise hide anything underneath it) but below the
+        // zone outline / selected-zone highlight so it never competes with the
+        // actual data.
+        map.addSource('rivers-polygons', { type: 'geojson', data: riversPolygons });
+        map.addLayer({
+          id: 'rivers-fill',
+          type: 'fill',
+          source: 'rivers-polygons',
+          paint: { 'fill-color': COLOR_WATER, 'fill-opacity': 0.35 },
+        });
+        map.addSource('rivers-lines', { type: 'geojson', data: riversLines });
+        map.addLayer({
+          id: 'rivers-line',
+          type: 'line',
+          source: 'rivers-lines',
+          paint: { 'line-color': COLOR_WATER, 'line-width': 1.5, 'line-opacity': 0.7 },
+        });
+
+        // 3. Nursery-distance isolines — non-interactive context, see the
+        // frontmatter comment for why this replaced the earlier nido_class
+        // toggleable layer.
+        map.addSource('nido-contours', { type: 'geojson', data: nidoContours });
+        map.addLayer({
+          id: 'nido-contours',
+          type: 'line',
+          source: 'nido-contours',
+          paint: { 'line-color': NIDO_CONTOUR_COLORS, 'line-width': 1.25, 'line-opacity': 0.65 },
+        });
+
+        // 4. Zone outlines — thin, always-on boundary for every zone.
+        map.addLayer({
+          id: 'zones-outline',
+          type: 'line',
+          source: 'zones',
+          paint: { 'line-color': '#EDE6D3', 'line-width': 0.75, 'line-opacity': 0.4 },
+        });
+
+        // 5. Evidenziazione della zona selezionata — nessun contorno fisso
+        // sulla mappa (rimosso su richiesta di Nico dopo due iterazioni: prima
+        // per-zona su shortlisted, poi dissolto). Un solo layer con filtro
+        // aggiornato a ogni click: '' come valore iniziale non fa match con
+        // nessuna zona reale, quindi non compare nulla finche' non clicchi.
+        map.addLayer({
+          id: 'zones-selected-outline',
+          type: 'line',
+          source: 'zones',
+          filter: ['==', ['get', 'zone_name'], ''],
+          paint: { 'line-color': '#C69214', 'line-width': 3 },
+        });
+
+        setSelectedZone = (zoneName) => {
+          map.setFilter('zones-selected-outline', ['==', ['get', 'zone_name'], zoneName || '']);
+        };
+
+        map.on('mouseenter', 'zones-fill', () => (map.getCanvas().style.cursor = 'pointer'));
+        map.on('mouseleave', 'zones-fill', () => (map.getCanvas().style.cursor = ''));
+        map.on('click', 'zones-fill', (e) => {
+          const props = e.features[0].properties;
+          showPanel(props);
+          setSelectedZone(props.zone_name);
+        });
       });
-    });
+    }
 
+    // Toolbar e legenda partono SUBITO (sincrone), non aspettano boot(): cosi'
+    // l'utente vede l'interfaccia (bottoni, legenda) anche mentre le fetch dei
+    // GeoJSON sono ancora in corso. boot() e' fire-and-forget qui (non e'
+    // awaited: initInteractiveMap non e' async e non c'e' nulla da attendere
+    // a questo livello) — eventuali eccezioni impreviste finiscono comunque in
+    // console invece di sparire silenziosamente, dato che fetchGeoJSON gia'
+    // cattura internamente i fallimenti di rete/parsing dei singoli file.
     renderToolbar();
     renderLegend();
+    boot().catch((err) => console.error('[InteractiveMap] boot() fallita:', err));
   }
 
   document.querySelectorAll('.interactive-map-wrap').forEach((el) => initInteractiveMap(el));
@@ -459,6 +530,14 @@ const {
     color: var(--color-text-muted);
     margin-top: 0.5rem;
     margin-bottom: 1.5rem;
+  }
+  .map-source a {
+    color: var(--color-brass);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+  .map-source a:hover {
+    color: var(--color-paper);
   }
 
   .interactive-map-card {
