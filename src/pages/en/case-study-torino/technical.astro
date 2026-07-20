@@ -1,6 +1,565 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { base } from '../../../utils/base.js';
 ---
-<BaseLayout title="Torino: Relocation Suitability - Technical Deep Dive">
-  <h1>Case Study Torino - Technical placeholder</h1>
+<BaseLayout title="Torino: Relocation Suitability — Technical Deep Dive - Nico">
+  <div class="page-container">
+    <div class="case-study">
+      <header class="case-hero">
+        <p class="eyebrow">Case Study — Torino Relocation Suitability</p>
+        <h1>Technical Deep Dive</h1>
+        <p class="intro">
+          This page documents the pipeline behind the
+          <a class="inline-link" href={`${base}/en/case-study-torino/`}> Torino case study </a>
+          in full: the PostGIS schema, the exact QNEAT3 parameters used for
+          every isochrone, the classification methods, and the limitations
+          that were stated — not corrected retroactively — throughout the
+          analysis. It's written for anyone evaluating the methodology
+          directly rather than taking the Overview's narrative at face
+          value.
+        </p>
+        <p class="aside">
+          Source code:{' '}
+          <a class="inline-link" href="https://github.com/antonio-nico-santos/gis-portfolio" target="_blank" rel="noopener">
+            github.com/antonio-nico-santos/gis-portfolio
+          </a>
+        </p>
+      </header>
+    </div>
+
+    <div class="case-study">
+      <section class="methodology">
+
+        <article class="step">
+          <h2>1. Data pipeline and database schema</h2>
+          <p>
+            All analysis data lives in a single PostgreSQL/PostGIS database
+            (<code>relocation</code>), in a dedicated <code>torino </code> 
+            schema. Every geometry is stored in <strong>EPSG:32632</strong>
+            (WGS 84 / UTM zone 32N) rather than WGS 84 lat/lon — a fixed,
+            projected CRS in meters is what makes distance and area
+            calculations (buffers, isochrone raster cell size, choropleth
+            area) valid in the first place; degrees aren't a usable unit for
+            that math.
+          </p>
+          <table class="spec-table">
+            <thead>
+              <tr><th>Table</th><th>Geometry</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>omi_zones</code></td>
+                <td>MultiPolygonZ</td>
+                <td>47 OMI real-estate zones, with published rent bands (min/max by property condition) and a derived <code>affito</code> column — the estimated-rent figure actually used downstream, not the raw OMI range</td>
+              </tr>
+              <tr>
+                <td><code>torino_confini</code></td>
+                <td>MultiPolygon</td>
+                <td>Administrative boundary of the comune, carrying ISTAT-style codes (province, region, comune) used to clip and label the other layers</td>
+              </tr>
+              <tr>
+                <td><code>vie_torino</code></td>
+                <td>LineString</td>
+                <td>Road network extracted via OSMnx, including the routing topology QNEAT3's Dijkstra-based solver needs (<code>u</code>, <code>v</code>, <code>key</code> from the source OSMnx/NetworkX multigraph; <code>source</code>, <code>target</code> as reindexed integer node IDs)</td>
+              </tr>
+              <tr>
+                <td><code>asili_nido</code></td>
+                <td>Point</td>
+                <td>Nurseries sourced from Google Places, extended with availability-tracking fields (<code>disponibilita</code>, <code>dispn_da</code>) and cost fields (<code>cost_full</code>, <code>cost_matut</code>, <code>cost_vesp</code>, <code>cost_iscrz</code>) updated by hand as replies came in from the 100+ nurseries contacted by email</td>
+              </tr>
+              <tr>
+                <td><code>farmacia</code>, <code>palestra</code>, <code>parco_giochi</code>, <code>supermercato</code>, <code>stazione</code></td>
+                <td>Point</td>
+                <td>Uniform Google Places POI tables (pharmacies, gyms, playgrounds, supermarkets, stations) — service-context layers for step 1/3 of the Overview</td>
+              </tr>
+              <tr>
+                <td><code>appartamento</code></td>
+                <td>Point</td>
+                <td>Working table for candidate listings: price, size, condominium/utilities/parking costs, nursery proximity and cost, plus negotiation fields (contact name, phone, exact address, free-text comments, a priority flag). None of this is published as-is — the anonymized 15-row A–O table on the Overview page is derived from it, with every one of those identifying columns stripped</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            <strong>View</strong> <code>nido_disponibile</code> — nurseries
+            filtered to <code>disponibilita = 'SI'</code>, ordered by
+            <code> cost_full</code>. This was the working shortlist consulted
+            while responses were still arriving by email, not a separate
+            export.
+          </p>
+          <p>
+            <strong>Indexing:</strong> every geometry column carries a GiST
+            spatial index — required once isochrone generation and spatial
+            joins are running against a road network with thousands of
+            edges.
+          </p>
+          <p>
+            The pedestrian network used for the nursery isochrones (step 4)
+            isn't a separate table in this schema — it came from a second, 
+            <code> network_type='walk'</code> OSMnx query (distinct from the
+            <code> drive</code>-type graph behind <code>vie_torino</code>)
+            and was carried through QNEAT3 as a QGIS layer rather than
+            persisted to PostGIS.
+          </p>
+          <p class="callout">
+            <strong>Declared limitation:</strong> no foreign keys. Zone
+            membership on <code>asili_nido</code> (<code>omi_zone</code>,
+            <code> cod_zone</code>) is a denormalized text match against
+            <code> omi_zones</code>, not an enforced relationship — workable
+            for a single-analyst dataset built iteratively over a few
+            weeks, but it means referential integrity was never checked
+            automatically. A renamed or resplit zone in
+            <code> omi_zones</code> wouldn't have propagated. Stated here
+            rather than fixed after the fact, for the same reason the other
+            limits on this page are: the goal is an accurate record of the
+            process actually used, not a retroactively idealized one.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>2. Road network and speed model</h2>
+          <p>
+            Extracted via OSMnx and loaded into <code>vie_torino</code>.
+            Since per-segment real-world speed data isn't consistently
+            available, travel speed is assigned by OSM road classification:
+          </p>
+          <pre class="spec-block">motorway    130 km/h
+trunk       110 km/h
+primary      90 km/h
+secondary    70 km/h
+tertiary     50 km/h
+residential  30 km/h</pre>
+          <p>
+            This same table, filtered to <code>highway = 'footway'</code>,
+            is the walking-network case referenced throughout this page —
+            not stored separately, filtered per analysis.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>3. Commute isochrones <span class="step-ref">(step 2 of the Overview)</span></h2>
+          <p>
+            <strong>Tool:</strong> QGIS QNEAT3, algorithm <em>Iso-Area as
+            Interpolation (from Layer)</em>, run once per work site
+            (Luserna San Giovanni, the Aosta-area site, Moncalieri).
+          </p>
+          <pre class="spec-block">CELL_SIZE:      5
+STRATEGY:       1        (Fastest Path — time, not distance)
+SPEED_FIELD:    maxspeed_finale
+DEFAULT_SPEED:  5         (fallback value, network-entry cost)
+MAX_DIST:       25000
+TOLERANCE:      5</pre>
+          <p>
+            Output units are <strong>seconds</strong> — confirmed
+            empirically by checking one raster pixel against a known real
+            travel time, since QNEAT3 doesn't document this clearly itself.
+          </p>
+          <p><strong>Post-processing:</strong></p>
+          <ol class="spec-list">
+            <li>Clip each site's raster to the Torino boundary (<code>torino_confini</code>).</li>
+            <li>Combine with Raster Calculator into a weighted weekly-commute figure: <code>(chatillon × 2) + (luserna × 2) + (moncalieri × 1)</code> — weights are assumed weekly visit frequency per site, not priority.</li>
+            <li>Divide by 60 to convert seconds to minutes.</li>
+          </ol>
+          <p>
+            <strong>Classification:</strong> Equal Interval, 4 classes,
+            thresholds set manually after inspecting the histogram rather
+            than computed automatically —
+            <code>&lt; 200 min</code>, <code>200–210 min</code>,
+            <code>210–220 min</code>, <code>&gt; 220 min</code>.
+          </p>
+          <p class="callout">
+            <strong>Known limitation, stated deliberately:</strong> the
+            network is treated as undirected — no handling of one-way
+            restrictions — and real traffic (peak hours, congestion) isn't
+            modeled. Adequate for regional-scale comparison between
+            neighborhoods, not for street-level routing. Real commute times
+            are likely underestimated.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>4. Local services and nursery data collection <span class="step-ref">(step 3)</span></h2>
+          <p>
+            OpenStreetMap's coverage of nurseries, markets, gyms,
+            playgrounds, and pharmacies was too sparse for this to work, so
+            all POI data came from the Google Places API instead — queried
+            in sub-areas to stay under its per-query result cap, covering
+            both Torino and Pinerolo (the real alternative ruled out in
+            step 5). Results were cleaned with an AOI filter and duplicate
+            removal (duplicates are expected at sub-area boundaries), then
+            loaded into PostGIS.
+          </p>
+          <p>
+            Nursery availability specifically isn't something an API
+            returns — it came from directly emailing 100+ nurseries and
+            updating <code>asili_nido.disponibilita</code> in PostGIS as
+            replies arrived, using the <code>nido_disponibile</code> view
+            as a running shortlist.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>5. Pedestrian isochrones from available nurseries <span class="step-ref">(step 4)</span></h2>
+          <p>
+            <strong>Tool:</strong> QNEAT3, <em>Iso-Area as Contours (from
+            Layer)</em> and <em>Iso-Area as Polygons (from Layer)</em>,
+            multiple sources (nurseries with confirmed availability only).
+          </p>
+          <pre class="spec-block">Optimization Criterion:  Shortest Path (distance, not time)
+Network:                 pedestrian graph (OSMnx, network_type='walk')</pre>
+          <p>
+            <strong>Bands:</strong> exact isolines at 200 / 400 / 600 / 800
+            / 1000 m — these are contour lines, not ranges, so the correct
+            legend label is the exact value of each line, not an interval.
+          </p>
+          <p class="callout">
+            <strong>A deliberate methodological choice:</strong> distance
+            instead of time. Walking time with a toddler is too variable
+            to be a reliable metric, so this uses shortest-path distance
+            rather than the fastest-path time model applied to the commute
+            step above — a different metric for a genuinely different
+            kind of movement, not an inconsistency.
+          </p>
+          <p>
+            <strong>Legal note, unchanged from the Overview:</strong> exact
+            nursery coordinates are sourced via the Google Places API,
+            whose terms of service prohibit displaying that content on a
+            non-Google map. Only the aggregated proximity contours are
+            published; no nursery location is shown as a point anywhere on
+            this site.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>6. Demographic classification <span class="step-ref">(ISTAT, step 1)</span></h2>
+          <p>
+            Quantile and Jenks natural breaks were tested in parallel;
+            equal-interval classes were discarded early because they
+            failed to surface any meaningful spatial variation in the
+            underlying data.
+          </p>
+          <p><strong>Published thresholds (census-section resolution, static choropleths):</strong></p>
+          <pre class="spec-block">Population under 5:     &lt; 2.2%    2.2–6.9%    6.9–22.2%    &gt; 22.2%
+Population aged 25–45:  &lt; 10%     10–26%      26–56%       &gt; 56%</pre>
+          <p>
+            A correction for statistical instability in low-population
+            census sections (small absolute numerators) was explored — a
+            reliability threshold plus Jenks recalculated only on the
+            filtered subset — but <strong>not applied</strong> to the
+            published map. The historical process this case study
+            documents (from 2025) didn't use that correction, and
+            retroactively "fixing" the map would misrepresent what was
+            actually decided at the time. The limitation is declared, not
+            corrected.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>7. OMI rent estimation</h2>
+          <p>
+            Estimated monthly rent per zone = OMI price/m² × 80 m² (the
+            family's target size) — a <strong>derived</strong> figure, not
+            the raw OMI range, which is why it needs to be stated
+            explicitly rather than left implicit.
+          </p>
+          <p>
+            <strong>Published thresholds:</strong> <code>&lt; €664</code>,
+            <code>€664–784</code>, <code>€784–1,000</code>,
+            <code>&gt; €1,000</code>.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>8. Interactive map <span class="step-ref">(step 5)</span> — data model and implementation notes</h2>
+          <p>
+            The interactive map aggregates all of the above to zone level.
+            Schema per OMI zone:
+          </p>
+          <pre class="spec-block">zone_name       string
+omi_class       "&lt;664" | "664-784" | "784-1000" | "&gt;1000"
+under5_class    "&lt;3.1" | "3.1-3.4" | "3.4-3.6" | "&gt;3.6"
+age2545_class   "&lt;21"  | "21-23"   | "23-25"    | "&gt;25"
+commute_class   "&lt;200" | "200-210" | "210-220"  | "&gt;220"
+shortlisted     boolean   (tag only, doesn't drive any map styling)</pre>
+          <p>
+            <strong>Threshold recalibration.</strong> The 
+            <code> under5</code>/<code>age2545</code> thresholds above are
+            <em> not</em> the same numbers as the static choropleths in
+            section 6, and that's intentional, not a bug: aggregating
+            fine-grained census-section data up to 47 coarser OMI zones
+            compresses the observed range toward the mean. Reapplying the
+            fine-grained thresholds as-is collapsed 46 of 47 zones into a
+            single class — no visible signal. The interactive-map
+            thresholds are quartiles recalculated on the actual
+            OMI-zone-level distribution. Even recalibrated, the real
+            spread is modest — roughly 2.8 percentage points for
+            <code> under5</code> across all 47 zones — so the classes make
+            the map legible; they don't manufacture a difference that
+            isn't in the data. <code>commute_class</code> was
+            <strong> not</strong> recalibrated: its relative dispersion was
+            already low (coefficient of variation ≈ 3%), and round,
+            communicable thresholds were preferred over statistically
+            "balanced" cuts with no intuitive meaning.
+          </p>
+          <p>
+            <strong>Rendering constraint.</strong> Astro's scoped
+            <code> &lt;style&gt;</code> blocks apply an attribute to
+            elements present in the compiled template; elements created at
+            runtime via <code>innerHTML</code> (the toolbar, legend, and
+            detail panel here are all built in JS) never receive that
+            attribute, so scoped rules silently don't match them — inline
+            styles worked, scoped <code>width</code>/<code>height </code>
+            didn't, producing an invisible 0×0 legend swatch until this
+            was diagnosed. Fixed with <code>&lt;style is:global&gt; </code>
+            on the component's whole style block, judged low collision
+            risk given how specific its class names already are.
+          </p>
+          <p>
+            <strong>Initial view:</strong> anchored to
+            <code> map.fitBounds()</code> over the real bounding box of the
+            loaded zone geometries (40px padding), computed after fetching
+            all four GeoJSON layers but before map creation — rather than
+            a hand-picked center/zoom, which would need re-tuning by hand
+            every time the data's extent changed.
+          </p>
+          <p class="callout">
+            <strong>Limits, stated as of this writing:</strong> no
+            keyboard alternative to clicking a zone (MapLibre doesn't
+            expose polygons as focusable DOM elements); no
+            <code> maxBounds</code>, so panning outside the data extent is
+            possible even after the initial fit; performance with the
+            full 47-zone dataset hasn't been stress-tested outside local
+            development. And structurally: aggregating ISTAT's fine
+            census-section demography up to OMI-zone granularity for this
+            export is a real loss of spatial resolution compared to the
+            static choropleths above — the same category of trade-off as
+            the undirected road network and distance-not-time metric
+            declared elsewhere on this page.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>9. Real monthly cost model <span class="step-ref">(step 7)</span></h2>
+          <pre class="spec-block">price_total  = rent + condo_fee + utilities + parking
+             + (property_tax + furnishing + deposit) / 12
+
+cost_full    = price_total + nursery_cost_full_time
+cost_part    = price_total + nursery_cost_part_time</pre>
+          <p>
+            One-off costs (furnishing, agency commission) are amortized
+            over an assumed minimum one-year tenancy. Missing values are
+            imputed with the mean across the candidate set.
+          </p>
+          <p>
+            <strong>Output:</strong> a relative index (100 = cheapest),
+            computed separately per scenario rather than as one combined
+            number — full-time and part-time rankings don't always agree.
+            One concrete case in the dataset: an apartment ranked eighth
+            under the full-time scenario overtakes the family's actual
+            choice in cost-effectiveness under the part-time scenario. A
+            single blended number would have hidden that.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>10. Custom basemap</h2>
+          <p>
+            No third-party basemap tiles anywhere on this site — CARTO's
+            Dark Matter/Positron styles are free only for non-commercial
+            use or approved "grantee" users, and a freelance-facing
+            portfolio sits in a legal gray area there. Every map instead
+            uses a basemap built from scratch with OSMnx:
+          </p>
+          <pre class="spec-block">water_tags = &#123;"natural": "water", "waterway": True&#125;
+vegetation_tags = &#123;
+    "natural": "wood",
+    "landuse": ["forest", "meadow", "grass"],
+    "leisure": "park",
+&#125;</pre>
+          <p>
+            Line and polygon geometries are separated before export
+            (<code>LineString</code> vs. <code>Polygon</code>/<code>MultiPolygon</code>)
+            since OSMnx returns both under the same tag query. Hillshade
+            (context map for the commute step, from SRTM):
+          </p>
+          <pre class="spec-block">Z factor:    1
+Azimuth:     315°
+Altitude:    45°
+Opacity:     25–35%
+Blend mode:  Multiply</pre>
+        </article>
+
+        <article class="step">
+          <h2>11. Sources and attribution</h2>
+          <pre class="spec-block">Road network / basemap:   © OpenStreetMap contributors
+Elevation / hillshade:    U.S. Geological Survey (SRTM)
+Demographics:              ISTAT (2021 census)
+Real estate prices:        Agenzia delle Entrate – Osservatorio
+                            del Mercato Immobiliare (OMI)</pre>
+          <p>
+            Google Places is deliberately not in this attribution block.
+            It was the actual source for every nursery and service-POI
+            record, but its terms of service don't permit displaying that
+            content — including individual points — on a non-Google map.
+            Rather than a citation, the constraint is stated directly
+            wherever it's relevant (sections 4–5 above, and on the
+            Overview page): only aggregate, derived outputs are ever
+            published; no Places-sourced coordinate is shown as a point on
+            this site.
+          </p>
+        </article>
+
+      </section>
+    </div>
+
+    <a class="cta-button" href={`${base}/en/case-study-torino/`}>
+      ← Back to the case study overview
+    </a>
+  </div>
 </BaseLayout>
+
+<style>
+  .page-container {
+    padding-left: clamp(2rem, 5vw, 2cm);
+    padding-top: clamp(2rem, 5vw, 2cm);
+    padding-bottom: clamp(2rem, 5vw, 2cm);
+  }
+  @media (max-width: 640px) {
+    .page-container {
+      padding-left: 1.5rem;
+      padding-top: 1.5rem;
+      padding-bottom: 1.5rem;
+    }
+  }
+  .case-study {
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-brass);
+    margin: 0 0 0.5rem;
+  }
+  .case-hero h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    line-height: 1.25;
+    margin: 0 0 1.25rem;
+  }
+  .intro, .step p {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+  }
+  .aside {
+    font-family: var(--font-body);
+    font-style: italic;
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+    margin: 0 0 2rem;
+  }
+  .inline-link {
+    color: var(--color-brass);
+  }
+  .step {
+    margin: 2.5rem 0;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(198, 146, 20, 0.12);
+  }
+  .step h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.9rem;
+  }
+  .step-ref {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--color-text-muted);
+  }
+  .callout {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    border-left: 3px solid var(--color-brass);
+    padding: 0.85rem 1.1rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+  }
+  .spec-block {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.6;
+    margin: 1rem 0;
+  }
+  .spec-list {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+    padding-left: 1.4rem;
+  }
+  .spec-list li {
+    margin-bottom: 0.4rem;
+  }
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 1.25rem 0;
+  }
+  .spec-table th,
+  .spec-table td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(159, 173, 185, 0.15);
+  }
+  .spec-table th {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-brass);
+  }
+  .spec-table td {
+    font-family: var(--font-body);
+    color: var(--color-text-muted-2);
+    line-height: 1.55;
+  }
+  .spec-table code {
+    font-family: var(--font-mono);
+    color: var(--color-paper);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--color-paper);
+  }
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-ink);
+    background: var(--color-brass);
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    text-decoration: none;
+    margin: 1rem 0 2rem;
+  }
+</style>
