@@ -20,8 +20,8 @@ import { base } from '../../../utils/base.js';
         </p>
         <p class="aside">
           Source code:{' '}
-          <a class="inline-link" href="https://github.com/antonio-nico-santos/gis-portfolio" target="_blank" rel="noopener">
-            github.com/antonio-nico-santos/gis-portfolio
+          <a class="inline-link" href="https://github.com/antonio-nico-santos/suitable_relocation" target="_blank" rel="noopener">
+            github.com/antonio-nico-santos/suitable_relocation
           </a>
         </p>
       </header>
@@ -34,7 +34,7 @@ import { base } from '../../../utils/base.js';
           <h2>1. Data pipeline and database schema</h2>
           <p>
             All analysis data lives in a single PostgreSQL/PostGIS database
-            (<code>relocation</code>), in a dedicated <code>torino </code> 
+            (<code>relocation</code>), in a dedicated <code>torino</code>
             schema. Every geometry is stored in <strong>EPSG:32632</strong>
             (WGS 84 / UTM zone 32N) rather than WGS 84 lat/lon — a fixed,
             projected CRS in meters is what makes distance and area
@@ -42,6 +42,7 @@ import { base } from '../../../utils/base.js';
             area) valid in the first place; degrees aren't a usable unit for
             that math.
           </p>
+          <div class="spec-table-wrap">
           <table class="spec-table">
             <thead>
               <tr><th>Table</th><th>Geometry</th><th>Purpose</th></tr>
@@ -79,10 +80,11 @@ import { base } from '../../../utils/base.js';
               </tr>
             </tbody>
           </table>
+          </div>
           <p>
             <strong>View</strong> <code>nido_disponibile</code> — nurseries
             filtered to <code>disponibilita = 'SI'</code>, ordered by
-            <code> cost_full</code>. This was the working shortlist consulted
+            <code>cost_full</code>. This was the working shortlist consulted
             while responses were still arriving by email, not a separate
             export.
           </p>
@@ -94,21 +96,21 @@ import { base } from '../../../utils/base.js';
           </p>
           <p>
             The pedestrian network used for the nursery isochrones (step 4)
-            isn't a separate table in this schema — it came from a second, 
-            <code> network_type='walk'</code> OSMnx query (distinct from the
-            <code> drive</code>-type graph behind <code>vie_torino</code>)
+            isn't a separate table in this schema — it came from a second,
+            <code>network_type='walk'</code> OSMnx query (distinct from the
+            <code>drive</code>-type graph behind <code>vie_torino</code>)
             and was carried through QNEAT3 as a QGIS layer rather than
             persisted to PostGIS.
           </p>
           <p class="callout">
             <strong>Declared limitation:</strong> no foreign keys. Zone
             membership on <code>asili_nido</code> (<code>omi_zone</code>,
-            <code> cod_zone</code>) is a denormalized text match against
-            <code> omi_zones</code>, not an enforced relationship — workable
+            <code>cod_zone</code>) is a denormalized text match against
+            <code>omi_zones</code>, not an enforced relationship — workable
             for a single-analyst dataset built iteratively over a few
             weeks, but it means referential integrity was never checked
             automatically. A renamed or resplit zone in
-            <code> omi_zones</code> wouldn't have propagated. Stated here
+            <code>omi_zones</code> wouldn't have propagated. Stated here
             rather than fixed after the fact, for the same reason the other
             limits on this page are: the goal is an accurate record of the
             process actually used, not a retroactively idealized one.
@@ -281,9 +283,9 @@ age2545_class   "&lt;21"  | "21-23"   | "23-25"    | "&gt;25"
 commute_class   "&lt;200" | "200-210" | "210-220"  | "&gt;220"
 shortlisted     boolean   (tag only, doesn't drive any map styling)</pre>
           <p>
-            <strong>Threshold recalibration.</strong> The 
-            <code> under5</code>/<code>age2545</code> thresholds above are
-            <em> not</em> the same numbers as the static choropleths in
+            <strong>Threshold recalibration.</strong> The
+            <code>under5</code>/<code>age2545</code> thresholds above are
+            <em>not</em> the same numbers as the static choropleths in
             section 6, and that's intentional, not a bug: aggregating
             fine-grained census-section data up to 47 coarser OMI zones
             compresses the observed range toward the mean. Reapplying the
@@ -292,30 +294,30 @@ shortlisted     boolean   (tag only, doesn't drive any map styling)</pre>
             thresholds are quartiles recalculated on the actual
             OMI-zone-level distribution. Even recalibrated, the real
             spread is modest — roughly 2.8 percentage points for
-            <code> under5</code> across all 47 zones — so the classes make
+            <code>under5</code> across all 47 zones — so the classes make
             the map legible; they don't manufacture a difference that
             isn't in the data. <code>commute_class</code> was
-            <strong> not</strong> recalibrated: its relative dispersion was
+            <strong>not</strong> recalibrated: its relative dispersion was
             already low (coefficient of variation ≈ 3%), and round,
             communicable thresholds were preferred over statistically
             "balanced" cuts with no intuitive meaning.
           </p>
           <p>
             <strong>Rendering constraint.</strong> Astro's scoped
-            <code> &lt;style&gt;</code> blocks apply an attribute to
+            <code>&lt;style&gt;</code> blocks apply an attribute to
             elements present in the compiled template; elements created at
             runtime via <code>innerHTML</code> (the toolbar, legend, and
             detail panel here are all built in JS) never receive that
             attribute, so scoped rules silently don't match them — inline
-            styles worked, scoped <code>width</code>/<code>height </code>
+            styles worked, scoped <code>width</code>/<code>height</code>
             didn't, producing an invisible 0×0 legend swatch until this
-            was diagnosed. Fixed with <code>&lt;style is:global&gt; </code>
+            was diagnosed. Fixed with <code>&lt;style is:global&gt;</code>
             on the component's whole style block, judged low collision
             risk given how specific its class names already are.
           </p>
           <p>
             <strong>Initial view:</strong> anchored to
-            <code> map.fitBounds()</code> over the real bounding box of the
+            <code>map.fitBounds()</code> over the real bounding box of the
             loaded zone geometries (40px padding), computed after fetching
             all four GeoJSON layers but before map creation — rather than
             a hand-picked center/zoom, which would need re-tuning by hand
@@ -325,7 +327,7 @@ shortlisted     boolean   (tag only, doesn't drive any map styling)</pre>
             <strong>Limits, stated as of this writing:</strong> no
             keyboard alternative to clicking a zone (MapLibre doesn't
             expose polygons as focusable DOM elements); no
-            <code> maxBounds</code>, so panning outside the data extent is
+            <code>maxBounds</code>, so panning outside the data extent is
             possible even after the initial fit; performance with the
             full 47-zone dataset hasn't been stress-tested outside local
             development. And structurally: aggregating ISTAT's fine
@@ -517,11 +519,15 @@ Real estate prices:        Agenzia delle Entrate – Osservatorio
   .spec-list li {
     margin-bottom: 0.4rem;
   }
+  .spec-table-wrap {
+    margin: 1.25rem 0;
+    overflow-x: auto;
+  }
   .spec-table {
     width: 100%;
+    min-width: 32rem;
     border-collapse: collapse;
     font-size: 0.85rem;
-    margin: 1.25rem 0;
   }
   .spec-table th,
   .spec-table td {
@@ -548,8 +554,13 @@ Real estate prices:        Agenzia delle Entrate – Osservatorio
   }
   code {
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: 0.85em;
     color: var(--color-paper);
+    background: var(--color-ink-light);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    margin: 0 0.05em;
+    white-space: nowrap;
   }
   .cta-button {
     display: inline-block;
