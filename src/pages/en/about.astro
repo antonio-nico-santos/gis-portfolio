@@ -1,6 +1,156 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { base } from '../../utils/base.js';
+
+const skills = [
+  {
+    category: 'GIS platforms',
+    items: ['QGIS (incl. QNEAT3 network analysis)', 'ArcGIS', 'MapLibre GL JS'],
+  },
+  {
+    category: 'Geospatial Python',
+    items: ['GDAL', 'OSMnx', 'GeoPandas', 'Rasterio'],
+  },
+  {
+    category: 'Data & ETL',
+    items: ['FME', 'PostgreSQL / PostGIS', 'SQL'],
+  },
+  {
+    category: 'Analysis & cartography',
+    items: ['Spatial analysis', 'Network & isochrone modeling', 'Choropleth design', 'Historical aerial-photo interpretation'],
+  },
+  {
+    category: 'Delivery',
+    items: ['Technical training', 'Project management', 'Git / GitHub Actions', 'Static-site deployment (Astro)'],
+  },
+  {
+    category: 'Visual communication',
+    items: ['Photoshop', 'InDesign', 'Premiere'],
+  },
+];
 ---
-<BaseLayout title="About - Nico">
-  <h1>About EN - placeholder</h1>
+
+<BaseLayout title="About - Nico Antonio">
+  <div class="page-container">
+    <section class="about-hero">
+      <h1>About</h1>
+      <p class="lead">I'm a geographer who spent twelve years turning territorial disputes, aerial photographs, and administrative boundaries into decisions a public agency could act on. I'm now doing that work independently — and stretching into parts of GIS a public-sector job never had room for — for anyone who needs terrain read carefully.</p>
+    </section>
+
+    <section class="bio">
+      <h2>Background</h2>
+      <p>I trained in Geography at the University of São Paulo, after an earlier stint in Architecture and Urbanism. That path is also where GIS entered the picture: in 2005, alongside a FAPESP-funded research post on urban open-space systems (the QUAPÁ-SEL project), I took my first ArcGIS course and started producing cartographic material for other students' research — undergraduate, master's, and doctoral — and for labs at the Polytechnic School (POLI-USP). That overlap of GIS, urbanism, and geography is what pulled me toward Geography itself: I started attending classes in 2008 and transferred formally the following year.</p>
+
+      <p>In parallel, from roughly 2012 to 2024, I kept a second practice as a musician, composer, and actor — including writing and touring an independently produced song-opera that won a national recording grant. The design instincts behind this site's maps and visual system come from that side, not from a design degree.</p>
+
+      <p>I joined the Instituto Geográfico e Cartográfico (IGC), in São Paulo state, in 2013. What the role covered on paper and what I actually did diverged early on; over the following two years I built enough credibility internally to become the one actually proposing technical solutions, designing new processes, and training the technical team — permanent staff and interns alike. Much of that was self-taught, without a formal grounding in process design, which is also why the documentation trail from that period is thinner than the results: an FME + QGIS pipeline for jurisdiction-certificate issuance, projected to cut manual work by roughly 85%; an FME + Python ETL pipeline for territorial process analysis that saved 250+ technical hours a year; a data reorganization for the drainage-characterization service that cut turnaround time by 75%; and revised official jurisdiction maps for 30 municipalities.</p>
+
+      <h2>Why independent, why now</h2>
+      <p>By 2025 the technical scope of that role had a hard ceiling: full suitability analysis, raster overlay modeling, and 3D terrain work were never part of the job — the institute's focus was specific and didn't stretch that far. I started closing that gap the moment I left: the <a href={`${base}/en/case-study-worldbuilding/`}>World-building case study</a> — climate, biome, and hypsometry modeling for a tabletop setting — began right after I resigned, built on exactly the terrain I hadn't had room for professionally. The <a href={`${base}/en/case-study-torino/`}>Torino case study</a> came out of the same period, applying that expanded toolkit to a very real personal decision — where to live after relocating to Turin — on open data and open-source tools instead of institutional licenses and infrastructure. That's the practical argument for going independent: the analysis doesn't change, only the scope I get to work in and who's paying for the software.</p>
+    </section>
+
+    <section class="skills">
+      <h2>Skills</h2>
+      <div class="skills-grid">
+        {skills.map((group) => (
+          <div class="skill-group">
+            <h3>{group.category}</h3>
+            <ul class="skill-tags">
+              {group.items.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
+  </div>
 </BaseLayout>
+
+<style>
+  .about-hero {
+    max-width: 42rem;
+    margin-bottom: 2rem;
+  }
+  .about-hero h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.75rem;
+  }
+  .lead {
+    font-family: var(--font-body);
+    font-size: 1.1rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.65;
+    margin: 0;
+  }
+  .bio {
+    max-width: 42rem;
+    margin-bottom: 2.5rem;
+  }
+  .bio h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 2rem 0 0.75rem;
+  }
+  .bio h2:first-child {
+    margin-top: 0;
+  }
+  .bio p {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+  }
+  .bio a {
+    color: var(--color-brass);
+  }
+  .skills h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 1rem;
+  }
+  .skills-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+  }
+  .skill-group {
+    background: var(--color-ink-light);
+    border-radius: 8px;
+    padding: 1.1rem 1.3rem;
+  }
+  .skill-group h3 {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-brass);
+    margin: 0 0 0.7rem;
+  }
+  .skill-tags {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0;
+  }
+  .skill-tags li {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-paper);
+    background: var(--color-ink);
+    border: 1px solid rgba(198, 146, 20, 0.25);
+    border-radius: 4px;
+    padding: 0.3rem 0.55rem;
+  }
+</style>
