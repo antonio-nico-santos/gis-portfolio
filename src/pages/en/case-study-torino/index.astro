@@ -366,7 +366,7 @@ import InteractiveMap from '../../../components/InteractiveMap.astro';
     line-height: 1.25;
     margin: 0 0 1.25rem;
   }
-  .intro, .step p, .result p {
+  .intro, .step p:not(.callout), .result p:not(.callout) {
     font-family: var(--font-body);
     font-size: 1.05rem;
     color: var(--color-text-muted-2);
