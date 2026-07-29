@@ -1,6 +1,315 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { base } from '../../../utils/base.js';
 ---
 <BaseLayout title="World-building GDR - Nico">
-  <h1>Case Study World-building - Overview placeholder</h1>
+  <div class="page-container">
+    <div class="case-study">
+      <header class="case-hero">
+        <p class="eyebrow">Case Study — World-building</p>
+        <h1>Building the Ground Beneath a Solarpunk World</h1>
+        <p class="intro">
+          When I left my public-sector GIS job, I used the time to explore
+          directions the role never allowed — including spatializing a
+          fictional setting I'd been building for a homebrew Solarpunk
+          campaign (an original adaptation of the Open D6 system). Rather
+          than draw a map by hand, I treated it as a real modeling problem:
+          terrain, climate, hydrology, biomes, and settlement suitability,
+          generated as a proper GIS pipeline instead of a static
+          illustration.
+        </p>
+      </header>
+
+      <!-- TODO: hero image/figure (DEM overview or suitability map with the 17 settlements) -->
+
+      <section class="context">
+        <p class="intro">
+          <em>Latency</em> is the setting for a Solarpunk campaign: a society
+          organized into autonomous, decentralized settlements called
+          <em>Círculos</em>, built around cooperation and sustainability
+          rather than hierarchy or scarcity. I wanted the physical
+          geography behind that setting — mountains, rainfall, rivers,
+          biomes, where people could plausibly live — to be internally
+          consistent, not just visually plausible. This is the second
+          time I've built this world with GIS methods; the first pass
+          had no version control and cut corners I wanted to fix. Unlike
+          the Torino case study, there's no sensitive real-world data
+          here, which meant I could push the pipeline further technically
+          and publish it without anonymization.
+        </p>
+        <p class="callout">
+          <strong>A note on process:</strong> this pipeline was built with
+          AI-assisted coding (Claude Cowork) rather than written
+          line-by-line, which let me reach a level of complexity — six
+          linked stages, each with its own model and validation step —
+          well beyond what I could have scripted solo in the same
+          timeframe. My role was to direct the pipeline, make the
+          methodological calls, and validate outputs, mostly by checking
+          results spatially against my own GIS and fieldwork background.
+          That background covers terrain reading, hydrology, and
+          cartographic judgment well; it doesn't cover the
+          theoretical/mathematical foundations of some of the models
+          involved, particularly in the climate and snow stages — those I
+          can validate by result, not independently derive or fully
+          audit.
+        </p>
+      </section>
+
+      <section class="methodology">
+
+        <article class="step">
+          <h2>1. Terrain</h2>
+          <p>
+            The island sits at roughly 44° south latitude — deliberately
+            modeled on the scale and topography of New Zealand's South
+            Island — inside a custom 130 × 160 km domain. The mountainous
+            spine and coastal plateaus were hand-digitized in QGIS as a
+            "skeleton" of ridgelines and flat zones, then built out with
+            procedural noise and simulated hydraulic erosion into a full
+            elevation model.
+          </p>
+          <p>
+            The second version had a problem I could see before I could
+            name it: comparing it to real hillshade and topographic
+            references, the terrain read as organic and curvy in a way no
+            real relief does — closer to coral than rock. I pushed back
+            and asked for a third pass rather than accept it. The
+            underlying cause turned out to be a geometric defect in how
+            the terrain's texture was being warped, affecting close to a
+            third of the map; the fix — found by adjustment, not derived
+            outright — cut that down to a negligible fraction, checked
+            across several regions before moving forward.
+          </p>
+          <!-- TODO: DEM hillshade overview image -->
+        </article>
+
+        <article class="step">
+          <h2>2. Climate</h2>
+          <p>
+            Prevailing westerly winds hit the island's mountain spine and
+            drop their moisture on the windward slopes, leaving a drier
+            band in the rain shadow to the east — the same orographic
+            pattern that shapes the Southern Alps, which I used
+            throughout as a real-world reference to check that the
+            resulting temperature and rainfall patterns were physically
+            reasonable. That contrast — wet, temperate coasts on one
+            side; drier, more continental conditions on the other — is
+            the backbone of where the setting's biomes and, later, its
+            architecture diverge.
+          </p>
+          <!-- TODO: annual precipitation / temperature map -->
+        </article>
+
+        <article class="step">
+          <h2>3. Snow and permanent ice</h2>
+          <p>
+            The interior's highest peaks hold permanent snow and ice,
+            mapped from a monthly accumulation/melt model rather than a
+            fixed elevation cutoff — the boundary shifts with slope and
+            aspect, not just altitude.
+          </p>
+          <p class="callout">
+            <strong>Still under review:</strong> this is the stage I
+            trust the least so far and am actively still studying — I'd
+            rather hold back specific figures (like exact snowline
+            elevation) until I can validate them with more confidence
+            myself.
+          </p>
+          <!-- TODO: permanent snow / ELA map -->
+        </article>
+
+        <article class="step">
+          <h2>4. Hydrology</h2>
+          <p>
+            Rivers run off the mountain spine toward both coasts, feeding
+            lakes in the larger valleys — the water network that
+            determines where a Círculo can realistically draw water,
+            farm, or trade by boat. Two details came from years of
+            fieldwork surveying real watercourses: the first draft of the
+            stream network looked mechanically straight in a way no real
+            channel does, so I asked for it to be redrawn with more
+            organic curves; and the first version had no seasonal
+            variation, so I asked for flow to shift with monthly rainfall
+            and temperature — dry-season creeks, wet-season floods — the
+            way I've seen it behave in the field.
+          </p>
+          <!-- TODO: drainage network + lakes map, seasonal view -->
+        </article>
+
+        <article class="step">
+          <h2>5. Biomes</h2>
+          <p>
+            Land cover was classified with the Holdridge Life Zone
+            system, which places each cell by temperature and rainfall
+            rather than by hand — producing the dry rain-shadow scrub of
+            the interior, temperate forest on the wet coasts, and alpine
+            zones near the permanent snow line. This map isn't just
+            decorative: it's what the setting bible's regional
+            architecture styles are built on directly — rammed-earth,
+            half-buried construction in the cold mountain valleys;
+            raised, woven structures in the dense temperate forest; open,
+            ventilated coastal building in the drier plains — each style
+            tied to a specific biome this stage produced, not chosen
+            freehand.
+          </p>
+          <p class="callout">
+            <strong>Methodological call:</strong> Holdridge's standard
+            aridity thresholds are calibrated for hot deserts, and
+            applied unmodified here they never registered anything as
+            dry, no matter how little a place actually rained — a cool,
+            temperate island just doesn't generate enough
+            evapotranspiration to trip a desert-calibrated scale.
+            Rescaling that axis to the island's own climate range,
+            instead of forcing Holdridge's absolute categories, was a
+            deliberate decision once the data made the mismatch obvious.
+          </p>
+          <!-- TODO: biome map with legend, possibly paired with architecture styles -->
+        </article>
+
+        <article class="step">
+          <h2>6. Settlement suitability</h2>
+          <p>
+            The final stage scores the land for settlement viability —
+            slope, water proximity, solar exposure, agricultural
+            potential, biome — for two culturally distinct settlement
+            patterns: the structured, permanent Círculos, and the more
+            mobile placement logic of the Povo Livre, groups descended
+            from exiles who never settled into fixed communities. A
+            separate exclusion layer keeps candidate sites clear of the
+            remote territories associated with the Povo Silencioso —
+            respecting, spatially, a piece of the setting's own lore
+            about a reclusive non-human people.
+          </p>
+          <p>
+            Distance between candidates was computed with a cost-aware
+            shortest-path model (accounting for terrain difficulty, not
+            just straight-line distance) rather than simple radius
+            exclusion, after an early version placed unrealistic
+            clusters. Manually reviewing the output caught real problems
+            the pipeline's own checks missed — settlements placed inside
+            lakes, two settlements placed too close together across
+            categories that weren't being cross-checked — a good
+            reminder that visual review and automated testing catch
+            different kinds of mistakes.
+          </p>
+          <!-- TODO: InteractiveMap (extends Torino's InteractiveMap.astro) —
+               biome layer, climate layers, snow switcher, rivers as
+               always-on context layer, suitability/settlements as final
+               layer. 3D drape (MapLibre raster-dem) sequenced after this
+               stage. Open decisions before building this: isolines vs.
+               choropleth for climate, seasonal snapshot months, accent
+               color/motif hex values — see worldbuilding-case-study-draft.md -->
+        </article>
+
+      </section>
+
+      <section class="result">
+        <h2>Result</h2>
+        <p>
+          17 candidate settlement sites across both cultures, consistent
+          with the terrain, climate, water access, and biome built up
+          over the previous five stages — a physically grounded map for a
+          setting that started as worldbuilding notes and TTRPG lore, now
+          with a geography that could, in principle, be surveyed. The
+          pipeline stops here for portfolio purposes — further layers
+          (regional detail, per-settlement zoom) are planned, but as
+          depth for the campaign itself rather than additional case study
+          material.
+        </p>
+      </section>
+
+      <a class="cta-button" href={`${base}/en/case-study-worldbuilding/technical/`}>
+        Read the technical deep dive →
+      </a>
+    </div>
+  </div>
 </BaseLayout>
+
+<style>
+  .page-container {
+    padding-left: clamp(2rem, 5vw, 2cm);
+    padding-top: clamp(2rem, 5vw, 2cm);
+    padding-bottom: clamp(2rem, 5vw, 2cm);
+  }
+  @media (max-width: 640px) {
+    .page-container {
+      padding-left: 1.5rem;
+      padding-top: 1.5rem;
+      padding-bottom: 1.5rem;
+    }
+  }
+  .case-study {
+    max-width: 42rem;
+    margin: 0;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-brass);
+    margin: 0 0 0.5rem;
+  }
+  .case-hero h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    line-height: 1.25;
+    margin: 0 0 1.25rem;
+  }
+  .intro, .step p:not(.callout), .result p:not(.callout) {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+  }
+  .context {
+    margin: 0 0 1rem;
+  }
+  .step {
+    margin: 2.5rem 0;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(198, 146, 20, 0.12);
+  }
+  .step h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.9rem;
+  }
+  p.callout {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    border-left: 3px solid var(--color-brass);
+    padding: 0.85rem 1.1rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+  }
+  .result {
+    margin: 3rem 0 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(198, 146, 20, 0.12);
+  }
+  .result h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-brass);
+    margin: 0 0 0.9rem;
+  }
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-ink);
+    background: var(--color-brass);
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    text-decoration: none;
+  }
+</style>
