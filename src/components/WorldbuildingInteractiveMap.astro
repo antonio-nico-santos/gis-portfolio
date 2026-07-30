@@ -45,6 +45,8 @@ interface Props {
   tempImageUrl?: string;
   snowMonthsImageUrl?: string;
   snowPermanentImageUrl?: string;
+  povoLivreImageUrl?: string;
+  terrainTilesUrl?: string;
 }
 const {
   biomesUrl = `${base}/data/worldbuilding-biomes.geojson`,
@@ -56,6 +58,8 @@ const {
   tempImageUrl = `${base}/data/worldbuilding-temp-clean.png`,
   snowMonthsImageUrl = `${base}/data/worldbuilding-snow-months-clean.png`,
   snowPermanentImageUrl = `${base}/data/worldbuilding-snow-permanent-clean.png`,
+  povoLivreImageUrl = `${base}/data/worldbuilding-povo-livre-clean.png`,
+  terrainTilesUrl = `${base}/data/terrain-dem/{z}/{x}/{y}.png`,
 } = Astro.props;
 ---
 
@@ -75,7 +79,12 @@ const {
           data-temp-url={tempImageUrl}
           data-snow-months-url={snowMonthsImageUrl}
           data-snow-permanent-url={snowPermanentImageUrl}
+          data-povo-livre-url={povoLivreImageUrl}
+          data-terrain-tiles-url={terrainTilesUrl}
         ></div>
+        <button type="button" class="terrain-toggle-btn" id="wb-map-3d-toggle" aria-pressed="false">
+          3D terrain
+        </button>
       </div>
       <aside class="map-sidebar">
         <div class="map-legend" id="wb-map-legend"></div>
@@ -94,9 +103,13 @@ const {
     (see Step 5). Landscape descriptions and real-world analogs:
     <code>biome_landscape_characteristics.md</code>, validated against South
     Island, New Zealand ecology. Climate and snow: Smith & Barstad (2004)
-    orographic model / Tappa 3 mass-balance snow model. Rivers and lakes are
-    shown as context only, thresholded the same way as the static hydrology
-    map.
+    orographic model / Tappa 3 mass-balance snow model. Povo Livre
+    suitability: same five-criteria composite as the Círculo model (Step
+    6), reweighted for a forestry-foraging economy (biome 0.60, agriculture
+    0.10) — a continuous surface rather than discrete sites, since a
+    culture defined by not settling has no "candidate settlements" to
+    place. Rivers and lakes are shown as context only, thresholded the same
+    way as the static hydrology map.
   </p>
 </div>
 
@@ -240,8 +253,19 @@ const {
         { color: '#f5f7f8', label: 'Permanent snow & ice' },
       ],
     },
+    povo_livre: {
+      label: 'Povo Livre suitability',
+      legendTitle: 'Povo Livre suitability (foraging/forestry composite)',
+      urlKey: 'povoLivre',
+      classes: [
+        { color: '#e8dde0', label: '< 0.43 (low)' },
+        { color: '#c2a0ab', label: '0.43–0.70 (moderate)' },
+        { color: '#8f5f6e', label: '0.70–0.80 (high)' },
+        { color: '#5c3345', label: '> 0.80 (very high)' },
+      ],
+    },
   };
-  const LAYER_ORDER = ['biome', 'precip', 'temp', 'snow_months', 'snow_permanent'];
+  const LAYER_ORDER = ['biome', 'precip', 'temp', 'snow_months', 'snow_permanent', 'povo_livre'];
   const LAYER_LABELS = { biome: 'Biomes', ...Object.fromEntries(LAYER_ORDER.filter((k) => k !== 'biome').map((k) => [k, RASTER_LAYERS[k].label])) };
 
   function initInteractiveMap(container) {
@@ -251,6 +275,7 @@ const {
     const legendEl = container.querySelector('#wb-map-legend');
     const panelContentEl = container.querySelector('#wb-zone-panel-content');
     const panelCloseEl = container.querySelector('#wb-zone-panel-close');
+    const terrainToggleEl = container.querySelector('#wb-map-3d-toggle');
 
     const urls = {
       biomes: mapEl.dataset.biomesUrl,
@@ -262,7 +287,10 @@ const {
       temp: mapEl.dataset.tempUrl,
       snowMonths: mapEl.dataset.snowMonthsUrl,
       snowPermanent: mapEl.dataset.snowPermanentUrl,
+      povoLivre: mapEl.dataset.povoLivreUrl,
+      terrainTiles: mapEl.dataset.terrainTilesUrl,
     };
+    let terrainEnabled = false;
 
     function buildBiomeMatchExpression() {
       const expr = ['match', ['get', 'biome_class']];
@@ -410,9 +438,46 @@ const {
           paint: { 'raster-opacity': 1 },
         });
 
+        // 1b. Terrain source — a small self-generated raster-dem tile
+        // pyramid (zoom 6-11, Mapbox Terrain-RGB encoding, ocean clipped to
+        // 0 for a flat sea-level plane), NOT wired to setTerrain() until
+        // the user opts in via the "3D terrain" button. MapLibre's terrain
+        // API expects a standard z/x/y tile pyramid in real lng/lat — this
+        // world's pseudo-degree coordinate hack (native meters ÷ 100,000)
+        // happens to double as valid input here too, since at these tiny
+        // angles (<1° from the equator) the Mercator/linear discrepancy is
+        // negligible.
+        map.addSource('dem-src', {
+          type: 'raster-dem',
+          tiles: [urls.terrainTiles],
+          tileSize: 256,
+          maxzoom: 11,
+          encoding: 'mapbox',
+        });
+        map.addLayer({
+          id: 'sky',
+          type: 'sky',
+          paint: {
+            'sky-type': 'atmosphere',
+            'sky-atmosphere-sun-intensity': 8,
+          },
+        });
+
+        terrainToggleEl.addEventListener('click', () => {
+          terrainEnabled = !terrainEnabled;
+          terrainToggleEl.setAttribute('aria-pressed', String(terrainEnabled));
+          if (terrainEnabled) {
+            map.setTerrain({ source: 'dem-src', exaggeration: 3 });
+            map.easeTo({ pitch: 55, bearing: -15, duration: 800 });
+          } else {
+            map.setTerrain(null);
+            map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+          }
+        });
+
         // 2. Raster overlays — hidden by default (initial active layer is
         // 'biome', a vector layer, so every raster starts hidden).
-        const rasterSources = { precip: urls.precip, temp: urls.temp, snowMonths: urls.snowMonths, snowPermanent: urls.snowPermanent };
+        const rasterSources = { precip: urls.precip, temp: urls.temp, snowMonths: urls.snowMonths, snowPermanent: urls.snowPermanent, povoLivre: urls.povoLivre };
         LAYER_ORDER.filter((k) => k !== 'biome').forEach((key) => {
           const cfg = RASTER_LAYERS[key];
           const url = rasterSources[cfg.urlKey];
@@ -603,6 +668,30 @@ const {
   #wb-map {
     width: 100%;
     height: 480px;
+  }
+  .terrain-toggle-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 2;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    color: var(--color-paper);
+    background: rgba(10, 22, 32, 0.82);
+    border: 1px solid rgba(198, 146, 20, 0.4);
+    border-radius: 4px;
+    padding: 0.4rem 0.7rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .terrain-toggle-btn:hover {
+    border-color: var(--color-brass);
+  }
+  .terrain-toggle-btn[aria-pressed='true'] {
+    background: var(--color-brass);
+    color: var(--color-ink);
+    border-color: var(--color-brass);
   }
   .map-sidebar {
     width: 250px;
