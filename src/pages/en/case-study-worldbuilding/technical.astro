@@ -1,6 +1,798 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { base } from '../../../utils/base.js';
+import { Image } from 'astro:assets';
+import biomeMap from '../../../assets/images/worldbuilding-biomes.png';
+import foldBeforeAfter from '../../../assets/images/worldbuilding-fold-before-after.png';
+import foldDiagnostic from '../../../assets/images/worldbuilding-fold-diagnostic.png';
+import snowMassBalance from '../../../assets/images/worldbuilding-snow-massbalance.png';
+import streamThresholdRejected from '../../../assets/images/worldbuilding-stream-threshold-rejected.png';
 ---
-<BaseLayout title="World-building - Technical Deep Dive">
-  <h1>Case Study World-building - Technical placeholder</h1>
+<BaseLayout title="World-building: Latency — Technical Deep Dive - Nico">
+  <div class="page-container">
+    <div class="case-study">
+      <header class="case-hero">
+        <p class="eyebrow">Case Study — World-building: Latency</p>
+        <h1>Technical Deep Dive</h1>
+        <p class="intro">
+          This page documents the six-stage GIS pipeline behind the
+          <a class="inline-link" href={`${base}/en/case-study-worldbuilding/`}> World-building case study </a>
+          in full: the exact generation and analysis method for each stage,
+          the parameters used, the validation performed against a real
+          reference region, and — deliberately included rather than
+          cropped out — the bugs found along the way and how they were
+          diagnosed. Latency is a fictional island, so nothing here is
+          "ground truth" in the way Torino's is; the standard applied
+          instead is internal physical/statistical consistency and, where
+          possible, comparison against a real analog region.
+        </p>
+        <p class="aside">
+          Validation reference throughout: South Island, New Zealand
+          (Southern Alps) — a young, actively-uplifting island range with a
+          strong orographic rain shadow, similar latitude magnitude, and
+          four real seasons.
+        </p>
+      </header>
+    </div>
+
+    <div class="case-study">
+      <section class="methodology">
+
+        <article class="step">
+          <h2>1. Domain, CRS, and pipeline architecture</h2>
+          <p>
+            Everything in this project lives on the same 130&nbsp;km
+            (E–W) × 160&nbsp;km (N–S) domain, in a custom Lambert Conformal
+            Conic projection defined for this fictional world rather than
+            reused from a real place:
+          </p>
+          <pre class="spec-block">+proj=lcc +lat_1=-44.48 +lat_2=-43.52 +lat_0=-44 +lon_0=42 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs
+xmin=-65000  xmax=65000  ymin=-80000  ymax=80000   (meters)</pre>
+          <p>
+            Six sequential stages, each closed out with a written decision
+            log before the next began: <strong>terrain</strong> (30&nbsp;m) →
+            <strong>climate</strong> (temperature + precipitation, 120&nbsp;m
+            working resolution) → <strong>snow &amp; derived climate
+            metrics</strong> → <strong>hydrology</strong> (30&nbsp;m) →
+            <strong>biomes</strong> (120&nbsp;m) → <strong>settlement
+            suitability</strong> (120&nbsp;m). Every stage reads only the
+            previous stages' outputs — no stage was allowed to reach back
+            and quietly patch an earlier one; when an earlier assumption
+            turned out wrong (see the DEM fold bug below, or the naive vs.
+            mass-balance snow line in section 4), it's recorded as a
+            correction, not silently absorbed.
+          </p>
+          <p class="callout">
+            <strong>No GRASS/GDAL/rasterio/shapely for most of this
+            project.</strong> The working sandbox this pipeline was built
+            in had restricted package access, so tools normally reached for
+            first — <code>r.watershed</code>, <code>r.stream.extract</code>,
+            <code>r.grow.distance</code>, geometry libraries — were
+            reimplemented from their published algorithms in
+            NumPy/SciPy/scikit-image instead of assumed available. That
+            constraint shows up repeatedly below.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>2. Terrain generation <span class="step-ref">(Tappa 1)</span></h2>
+          <p>
+            Elevation is <code>structure(x,y) + noise(x,y) × amplitude −
+            sea_level_offset</code>. <strong>Structure</strong> comes from a
+            hand-authored skeleton (ridge centerlines with Gaussian
+            cross-sections, plateau/amplitude zones) rather than emerging
+            from noise alone — the mountain spine, its branching, and the
+            regional plains are drawn, not rolled. <strong>Noise</strong> is
+            a ridged/turbulence Simplex fBm (signed fold
+            <code>1 − 2·|n|</code>) with domain warping (Iñigo Quílez-style
+            pseudo-random vector field, two octave bands — a coastline-scale
+            warp and a fine-detail warp) added for irregularity.
+          </p>
+          <pre class="spec-block">seed: 42                          noise_octaves: 6
+noise_base_wavelength_m: 25000    noise_amplitude_m: 200
+lacunarity: 2.0                   persistence: 0.5
+warp_wavelength_m: 15000          warp_amplitude_m: 5000
+noise_warp_wavelength_m: 4000     noise_warp_amplitude_m: 1500</pre>
+          <p>
+            <strong>Hydraulic erosion:</strong> droplet-based (Beyer/Lague
+            method), fluvial only — 300,000 droplets for the initial pass,
+            later densified to 0.3 droplets per land cell (~3.2M droplets)
+            once the DEM was finalized.
+          </p>
+          <p>
+            <strong>Real-texture grafting (v2).</strong> Pure synthetic
+            noise measured as spectrally too smooth against real terrain: a
+            2D FFT radial power-spectral-density analysis gave a spectral
+            slope β≈2.50 (long wavelengths) rising to β≈4.54 (short
+            wavelengths) for real SRTM data, versus a flat β≈3.72–3.74 for
+            the synthetic noise at every wavelength — visually, "rougher
+            terrain reads as smoother than it should." Fix: real SRTM GL3
+            texture (Piemonte/western Alps, detrended with a 15&nbsp;km
+            Gaussian blur to remove its own regional slope) was grafted in
+            as the fine-detail layer, closing the gap to β≈2.38 / β≈4.03.
+          </p>
+          <p class="callout">
+            <strong>Declared inconsistency:</strong> the project's own
+            validation reference is South Island, NZ, but the texture graft
+            uses Piemonte SRTM data. An actual South Island tile was tested
+            first — 39.7% NODATA overall, and even its cleanest low-void
+            window (near Lake Hawea/Wanaka) produced a "dead-straight
+            valley/lake gash" once grafted onto the skeleton (glacial-lake
+            troughs don't generalize as texture). Piemonte was used
+            instead, and the substitution is stated here rather than
+            hidden — the two regions' spectral slopes were checked as
+            broadly comparable (β≈2.87/4.91 vs. NZ's β≈3.12/5.09, not
+            directly comparable since measured with a different script) but
+            this is <em>not</em> a rigorous equivalence claim.
+          </p>
+
+          <h3 class="substep">The domain-warp fold bug</h3>
+          <p>
+            QGIS review of the v2 DEM's low-relief plains flagged a texture
+            that read as "coral or biological," not terrain. The domain
+            warp folds onto itself once the underlying vector field's
+            Jacobian determinant goes negative — mathematically, the warp
+            stops being a 1-to-1 remapping and starts multiply-covering
+            some areas of the output while leaving gaps in others. Root
+            cause: <code>persistence(0.7) × lacunarity(1.75) = 1.225</code>
+            — greater than 1, meaning higher noise octaves were gaining
+            weight instead of decaying, compounding the fold. Measured at
+            100&nbsp;m sampling: <strong>35.1% of the entire domain</strong>
+            had a folded warp map.
+          </p>
+          <div class="analysis-map-wrap">
+            <Image
+              src={foldBeforeAfter}
+              alt="Whole-domain fold map before and after the warp-amplitude fix: 35.1% of cells folded (left) versus 1.3% (right)"
+              widths={[600, 1200, 1800]}
+              sizes="(max-width: 640px) 100vw, 58rem"
+              format="webp"
+              quality={82}
+            />
+          </div>
+          <figcaption class="map-source">Cells with a folded (Jacobian ≤ 0) domain warp, 100 m sampling, whole 130×160 km domain — before (left, current v2 warp) and after (right, warp amplitude scaled to 40%)</figcaption>
+          <p>
+            Confirmed independently three ways before trusting the
+            diagnosis: a direct visual overlay of the fold-cell mask against
+            the "coral" artifact in an actual low-relief DEM crop (matching
+            essentially cell-for-cell), the whole-domain fold map on its
+            own with no elevation data at all (already a dense maze/coral
+            pattern with no other input), and closed circular ring
+            artifacts visible in eroded hillshade crops — a shape real
+            drainage networks never produce, since a river network is a
+            tree, not a closed loop.
+          </p>
+          <div class="analysis-map-wrap">
+            <Image
+              src={foldDiagnostic}
+              alt="Side-by-side comparison of an 18 km DEM crop showing coral-like terrain artifacts and the corresponding fold-cell mask, matching almost cell-for-cell"
+              widths={[600, 1200, 1800]}
+              sizes="(max-width: 640px) 100vw, 58rem"
+              format="webp"
+              quality={82}
+            />
+          </div>
+          <figcaption class="map-source">Same 18 km crop of the North Plains: the visible "coral" artifact in the v2 DEM (left) directly overlaid against the fold-cell mask alone (right)</figcaption>
+          <p>
+            <strong>Fix:</strong> scaled both warp amplitudes to 40% of
+            their v2 values (<code>warp_amplitude_m: 5000→2000</code>,
+            <code>noise_warp_amplitude_m: 1500→600</code>; wavelengths,
+            lacunarity, and persistence unchanged). Fold fraction dropped
+            from 35.1% to 1.3% domain-wide (north plains: 40.3%→2.2%; peak
+            zone: 39.2%→2.1%; coastline: 39.1%→1.8%), while total land
+            fraction barely moved (27.9%→28.0% for the main island). This
+            is the current, active DEM (v3).
+          </p>
+          <p class="callout">
+            <strong>Declared limitation:</strong> residual fold is
+            "1.3–2.2%, not mathematically zero." The coastline also reads
+            as somewhat more regular/"blobby" post-fix than v2's (unsafe)
+            pre-fix coastline — a deliberate trade-off, not resolved this
+            stage. A numeric plausibility check of the final DEM against
+            the actual South Island NZ reference (beyond the qualitative
+            spectral comparison above) was flagged as worth doing but not
+            attempted in this stage.
+          </p>
+          <p class="map-source">
+            Final v3 DEM: 30 m resolution, 5,334 × 4,334 grid, elevation
+            range −945.6 to +4020.2 m, land fraction 45.3% (later corrected
+            to 47.6% once Tappa 2 converted all <code>amplitude_zone</code>s
+            to <code>plateau</code>, see section 3).
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>3. Climate: temperature and precipitation <span class="step-ref">(Tappa 2)</span></h2>
+          <p>
+            <strong>Temperature</strong> is a closed-form model: a
+            sea-level field with its own seasonal cosine cycle, reduced by
+            elevation with a lapse rate that itself varies monthly.
+          </p>
+          <pre class="spec-block">T(x,y,m) = T_sl(x,y,m) − γ(m) · z(x,y)
+T_sl(x,y,m) = T_ref + dT/dlat·(lat(y) − lat_ref) + A(x,y)·cos(2π(m − m_peak(x,y))/12)
+
+lapse_rate_c_per_km: 5.0            (Norton 1985, 301 NZ stations — not the ICAO 6.5 standard)
+lapse_seasonal_amplitude_c_per_km: 0.3   peak month: February
+t_ref_sea_level_c: 11.5             lat_ref_deg: -44.0
+amplitude_coastal_c: 4.0            amplitude_inland_c: 7.0
+continentality_scale_km: 30.0       (SciPy distance_transform_edt, standing in for r.grow.distance)</pre>
+          <p>
+            <strong>Precipitation</strong> uses Smith &amp; Barstad's (2004)
+            linear orographic-precipitation theory, solved in Fourier
+            space — moist air is advected over the terrain spectrum, with
+            condensation/fallout delay time constants and a moist Brunt–
+            Väisälä stability frequency shaping where rain falls relative to
+            the ridge crest.
+          </p>
+          <pre class="spec-block">P̂(k,l) = Cw · iσ · ĥ(k,l) / [(1 − imHw)(1 + iστc)(1 + iστf)]
+
+wind direction: 250° (WSW), locked      wind speed: 12.0 m/s ± 2.0 seasonal
+Nm (moist stability): 0.005 s⁻¹         τc = τf: 1000 s
+orographic_duty_cycle: 0.07             (calibration factor — raw model output was ~170,000 mm/yr uncalibrated)
+background_precip_mm_per_month: 60.0    lee_floor_fraction: 0.45</pre>
+          <p>
+            Wind direction was tested, not assumed: effectiveness at 44°S
+            was checked for W (270°, 0.65), WSW (250°, 0.77 — adopted), and
+            SW (230°, 0.81 but rejected as hard to justify at this latitude
+            and it weakened the southern branch of the range too much
+            relative to the narrative).
+          </p>
+          <table class="spec-table">
+            <thead><tr><th>Metric</th><th>Latency</th><th>South Island, NZ reference</th></tr></thead>
+            <tbody>
+              <tr><td>Windward lowland precipitation</td><td>2,402 mm/yr</td><td>Greymouth, 2,443 mm/yr</td></tr>
+              <tr><td>Leeward lowland precipitation</td><td>430 mm/yr</td><td>Christchurch, 612 mm/yr</td></tr>
+              <tr><td>Windward:leeward ratio</td><td>5.6:1</td><td>4.0:1</td></tr>
+              <tr><td>Domain max precipitation</td><td>12,320 mm/yr</td><td>Southern Alps crest, ~11,000–13,000</td></tr>
+              <tr><td>Coastal annual mean temperature</td><td>11.3°C</td><td>Hokitika/Christchurch, 11.7–12.2°C</td></tr>
+              <tr><td>0°C isotherm, coldest month</td><td>1,410 m</td><td>Southern Alps winter, ~1,200–1,600 m</td></tr>
+            </tbody>
+          </table>
+          <p class="callout">
+            <strong>Where it diverges, and why:</strong> the windward:leeward
+            ratio and inland temperature range both run higher than the
+            real reference. Attributed to geography, not model error — this
+            island is smaller and steeper (mean elevation 919 m vs. the
+            real island's ~500 m), with a narrower lee band and nowhere
+            more than 30 km from the sea, all of which sharpen an
+            orographic contrast that's already strong in the real target.
+            The model itself also carries no moisture budget (rain only
+            decays leeward within the domain — a second downwind range
+            would never be starved) and the terrain's non-dimensional
+            mountain height sits near the flow-blocking threshold, which
+            likely overstates crest precipitation and understates the
+            upwind flank — a flow-blocking correction was identified as a
+            future extension, not applied here.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>4. Snow and derived climate metrics <span class="step-ref">(Tappa 3)</span></h2>
+          <p>
+            Three products, all derived from Tappa 2's monthly stacks
+            without adding new spatial input. <strong>Months with
+            snow</strong> uses a normal-CDF rain/snow partition (not a hard
+            0°C cutoff) — <code>t50_snow_rain_c = 1.0°C</code> (Jennings et
+            al. 2018, ~17,000 real stations) with a
+            <code>σ_day_c = 3.0°C</code> daily-variability spread, a month
+            counting only once modelled snow water equivalent clears 5 mm.
+            <strong>Seasonality index</strong> is just warmest-minus-coldest
+            monthly mean, land range 7.60–10.72°C.
+          </p>
+          <p>
+            <strong>Permanent snow line</strong> replaced Tappa 2's
+            provisional "all twelve monthly means below 0°C" rule (already
+            flagged there as sitting above the real equilibrium line) with
+            a minimal annual mass-balance model: accumulation from modelled
+            snowfall, ablation from a positive-degree-day melt model
+            (<code>degree_day_factor = 4.5 mm/°C·day</code>, Hock 2003).
+            "Permanent" = accumulation − melt ≥ 0 for the year.
+          </p>
+          <div class="analysis-map-wrap">
+            <Image
+              src={snowMassBalance}
+              alt="Three-panel snow figure: months with modelled snow, seasonality index, and permanent snow extent comparing the naive temperature-only threshold against the mass-balance model"
+              widths={[600, 1200, 1800]}
+              sizes="(max-width: 640px) 100vw, 58rem"
+              format="webp"
+              quality={82}
+            />
+          </div>
+          <figcaption class="map-source">Right panel: permanent-snow extent under the naive T-only rule (blue, 108 km²) versus the mass-balance model (blue + orange, 960 km²) — a ~9× correction, in the direction Tappa 2 had already predicted</figcaption>
+          <table class="spec-table">
+            <thead><tr><th>Metric</th><th>Latency</th><th>Real Southern Alps</th></tr></thead>
+            <tbody>
+              <tr><td>ELA, windward/wet</td><td>2,151 m</td><td>~1,600 m (west of the Main Divide)</td></tr>
+              <tr><td>ELA, leeward/dry</td><td>3,288 m</td><td>~2,000–2,200 m (east)</td></tr>
+              <tr><td>Windward–leeward ELA differential</td><td>1,136 m</td><td>400–600 m</td></tr>
+            </tbody>
+          </table>
+          <p class="callout">
+            <strong>Direction right, magnitude off — and that's informative,
+            not just a caveat.</strong> The ELA differential runs 2–3×
+            larger than the real reference, echoing Tappa 2's own overstated
+            windward:leeward precipitation ratio — the same geographic
+            cause propagating downstream through two independent models. A
+            sensitivity check (re-running with
+            <code>lapse_seasonal_amplitude_c_per_km</code> forced to 0)
+            found the naive metric swung 88% on that one uncalibrated
+            parameter, while the mass-balance metric moved only 8% — an
+            unplanned but real robustness gain from switching methods, not
+            just a number that happened to come out closer to reality.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>5. Hydrology <span class="step-ref">(Tappa 4)</span></h2>
+          <p>
+            No GRASS available, so <code>r.watershed</code>/
+            <code>r.stream.extract</code> were reimplemented from their
+            published algorithm: Priority-Flood + Epsilon (Barnes, Lehman
+            &amp; Mulla 2014) fills depressions and resolves D8 flow
+            direction in a single min-heap pass seeded from ocean cells,
+            at the DEM's native 30 m (5,334 × 4,334, 23.1M cells) — this
+            stage works at full terrain resolution, not the 120 m
+            climate/biome grid. A reverse topological pass over the fill
+            order accumulates flow, computed twice: a plain cell count and
+            a precipitation-weighted version using Tappa 2's actual monthly
+            rain, so seasonal streamflow could later be derived without
+            re-running the routing.
+          </p>
+          <p>
+            Streams are extracted at a plain contributing-area threshold
+            (<code>0.3 km²</code>), calibrated by visually sweeping
+            0.1/0.5/2.0 km² test crops and cross-checked against Horton's
+            (1945) drainage-density rule of thumb.
+          </p>
+          <div class="analysis-map-wrap">
+            <Image
+              src={streamThresholdRejected}
+              alt="Four candidate area-times-slope-squared channel initiation thresholds, each flooding wide areas of steep terrain solid blue instead of isolating a thin stream network"
+              widths={[600, 1200, 1800]}
+              sizes="(max-width: 640px) 100vw, 58rem"
+              format="webp"
+              quality={82}
+            />
+          </div>
+          <figcaption class="map-source">Rejected: area × slope² channel-initiation (Montgomery &amp; Foufoula-Georgiou, 1993). On this DEM's steepest terrain the criterion floods whole hillslopes rather than isolating channels — the formulation needs local calibration against real channel-head field survey data this project doesn't have</figcaption>
+          <table class="spec-table">
+            <thead><tr><th>Metric</th><th>Latency</th><th>Reference</th></tr></thead>
+            <tbody>
+              <tr><td>Drainage density</td><td>1.14 km/km²</td><td>Horton (1945) "moderate" range: 1–3 km/km²</td></tr>
+              <tr><td>Max discharge proxy / area</td><td>0.137 m³/s/km²</td><td>Rule-of-thumb range: 0.03–0.15</td></tr>
+              <tr><td>Windward:leeward discharge ratio</td><td>5.9:1</td><td>Tracks Tappa 2's 5.6:1 precipitation ratio</td></tr>
+            </tbody>
+          </table>
+          <p class="callout">
+            <strong>Two bugs caught by physical implausibility, not by
+            code review.</strong> A precision collision — reconstructing
+            flow order from a saved float32 elevation grid instead of
+            re-running the fill in float64 — silently collapsed 21,944
+            cells to identical elevations (float32's ~0.001 m precision vs.
+            the algorithm's own 1e-4 m tie-break epsilon), dragging
+            correlation against the trusted discharge raster to 0.87.
+            Separately, monthly discharge maxima came out an order of
+            magnitude below the annual maximum (6.7–11.9 vs. 103.1 m³/s) —
+            physically backwards — traced to dividing by seconds-per-year
+            instead of seconds-per-month in the seasonal routing pass. Both
+            declared limitations, not silently patched: discharge is stated
+            throughout as "an upper bound, not a discharge model" — no
+            infiltration, evapotranspiration, or channel routing lag is
+            modeled.
+          </p>
+          <p class="map-source">
+            Final: 9,912.5 km² land area, 377,281 stream cells (~11,318 km
+            of channel), 196,094 lake-mask cells (176.5 km², 1.8% of land,
+            flagged as an unreviewed byproduct of the fill pass rather than
+            a curated lake catalogue).
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>6. Biome classification <span class="step-ref">(Tappa 5)</span></h2>
+          <p>
+            A two-axis Holdridge Life Zone classification (Holdridge,
+            1967) — biotemperature and a moisture (PET ratio) axis —
+            replacing the original 2025 attempt's single-axis,
+            temperature-only limitation. PET is derived from biotemperature
+            via Holdridge's own empirical constant
+            (<code>PET = 58.93 × biotemperature</code>); the temperature
+            belt uses Holdridge's standard bands (1.5/3/6/12/18/24°C).
+          </p>
+          <p class="callout">
+            <strong>Holdridge's own absolute moisture bands don't work on
+            this world.</strong> Nothing on the island cleared Holdridge's
+            "Semiarid" threshold — even the driest cell (324 mm/yr) still
+            registered as "Subhumid" on his scale, because PET itself caps
+            near 700 mm/yr when biotemperature never exceeds 12°C here.
+            Fix: the moisture axis is rebinned into <strong>terciles of
+            this world's own land-cell distribution</strong> (wet &lt;
+            0.1184, moist 0.1184–0.5360, dry &gt; 0.5360) instead of
+            Holdridge's real-world-calibrated absolute cutoffs — a
+            world-specific classification grounded in the same theory, not
+            a literal transplant of Earth's numbers.
+          </p>
+          <div class="analysis-map-wrap">
+            <Image
+              src={biomeMap}
+              alt="Biome classification overlay on hillshade, showing the dry-scrub band clearly wider on the northeast lee side than the southwest windward side"
+              widths={[600, 1200, 1800]}
+              sizes="(max-width: 640px) 100vw, 58rem"
+              format="webp"
+              quality={82}
+            />
+          </div>
+          <figcaption class="map-source">Final classification, 120 m resolution, 9 classes, overlaid on hillshade</figcaption>
+          <p>
+            The strongest single confirmation of the wind-direction
+            decision propagating cleanly through every downstream stage:
+            <strong>Subalpine Dry Scrub is 335.1 km² on the leeward side and
+            0.0 km² windward</strong> — a clean, complete separation, not a
+            gradient.
+          </p>
+          <table class="spec-table">
+            <thead><tr><th>Class</th><th>Area</th><th>% of domain</th></tr></thead>
+            <tbody>
+              <tr><td>Lowland Steppe / Grassland</td><td>2,962.2 km²</td><td>29.9%</td></tr>
+              <tr><td>Woodland / Shrubland</td><td>2,834.8 km²</td><td>28.6%</td></tr>
+              <tr><td>Permanent Snow &amp; Ice</td><td>960.2 km²</td><td>9.7%</td></tr>
+              <tr><td>Subalpine Wet Forest</td><td>942.4 km²</td><td>9.5%</td></tr>
+              <tr><td>Temperate Forest</td><td>689.8 km²</td><td>7.0%</td></tr>
+              <tr><td>Alpine Tundra</td><td>616.5 km²</td><td>6.2%</td></tr>
+              <tr><td>Subalpine Dry Scrub</td><td>335.1 km²</td><td>3.4%</td></tr>
+              <tr><td>Alpine Fellfield</td><td>396.0 km²</td><td>4.0%</td></tr>
+              <tr><td>Subalpine Woodland</td><td>167.2 km²</td><td>1.7%</td></tr>
+            </tbody>
+          </table>
+          <p class="callout">
+            <strong>Declared limitation:</strong> the published color
+            palette fails strict colorblind-safety on its worst pair
+            (Temperate Forest vs. Subalpine Wet Forest, ΔE 5.6 against a
+            15.0 floor) — mitigated only through the interactive map's
+            click-to-select panel and legend, not fixed at the color level.
+            The 58.93 PET constant was also fit mostly on tropical/
+            subtropical stations and is "numerically fragile" below ~3°C
+            biotemperature — a live concern given this world's 7.39°C land
+            mean.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>7. Settlement suitability and site selection <span class="step-ref">(Tappa 6)</span></h2>
+          <p>
+            Two layer types, kept architecturally separate: <strong>núcleo</strong>
+            layers (continuous 0–1 desirability, combined by a
+            population-specific weighted sum) and <strong>exclusão</strong>
+            layers (0–1 multipliers on the composite, never additive terms).
+            Six núcleo layers — slope, water proximity, agriculture (a TWI
+            proxy), solar exposure, biome suitability, and settlement size
+            read off downstream rather than weighted in — feed two
+            <em>separate</em> composite surfaces, not one shared index,
+            because the Círculo (open-field agriculture) and Povo Livre
+            (forestry/foraging) economies weight biome so differently that
+            a single blended index would misrepresent one of them.
+          </p>
+          <table class="spec-table">
+            <thead><tr><th>Criterion</th><th>Círculo weight</th><th>Povo Livre weight</th></tr></thead>
+            <tbody>
+              <tr><td>Biome</td><td>0.30</td><td>0.60</td></tr>
+              <tr><td>Agriculture (TWI)</td><td>0.25</td><td>0.10</td></tr>
+              <tr><td>Slope</td><td>0.20</td><td>0.10</td></tr>
+              <tr><td>Solar exposure</td><td>0.20</td><td>0.15</td></tr>
+              <tr><td>Water proximity</td><td>0.05</td><td>0.05</td></tr>
+            </tbody>
+          </table>
+          <p>
+            <strong>Solar exposure</strong> is a from-scratch FAO-56
+            elevation-corrected clear-sky model (no <code>r.sun</code>
+            available), integrated over 16 horizon directions with a 10 km
+            shading radius across 12 mid-month days. It reproduced a
+            genuine, checked physical result for this world's southern
+            hemisphere: north-facing slopes receive ~37% more annual
+            insolation than south-facing slopes at matched grade (8,578 vs.
+            6,257 MJ/m²/yr, 8–25° slopes) — the mirror-image of the
+            northern-hemisphere intuition, confirmed rather than assumed.
+          </p>
+          <p>
+            <strong>Site selection</strong> (Círculo surface only, 17
+            sites): population converts to footprint via an assumed density
+            of 4,000 people/km², candidate cells are screened by mean
+            suitability over a square window, and sites are placed greedily,
+            largest population first, irrevocably. Two independent
+            minimum-distance rules apply simultaneously: straight-line
+            footprint non-overlap, and a cost-distance (Tobler hiking
+            function + 6.0 km/h boat speed) minimum travel time between
+            same-tier pairs and large–medium pairs.
+          </p>
+          <p class="callout">
+            <strong>Three redesign rounds before this held up.</strong> The
+            first straight-line-only distance rule collapsed to 5 of 17
+            sites placed (one site landed in a near-zero-suitability
+            corner). A tier-scoped fix reached 17/17 but put every single
+            site in the same biome — flagged, not shipped. The user's own
+            proposed cost-distance model fixed the biome monoculture (12
+            Grassland / 4 Woodland-Shrubland / 1 Temperate Forest) but a
+            manual spot-check afterward still found 7 of 17 sites sitting
+            partly in lakes (up to 95% of one large Círculo's window
+            covered by lake water) and a medium site only ~4 km from a
+            large one — caught by eye, not by any automated check, and
+            fixed by excluding lake cells from the effective land mask and
+            adding an explicit large–medium minimum-distance tier.
+          </p>
+          <p class="map-source">
+            Final: 17/17 Círculos placed, 0 minimum-distance violations, 0
+            on a lake — 4 large, 5 medium, 8 small. Mean suitability
+            0.762–0.887 across all sites. Slope thresholds (5%/30% grade),
+            the exclusion-zone buffer distances, and the settlement density
+            figure are all stated as placeholders, not calibrated to any
+            in-world source — there's no real soil/pedology data anywhere
+            in this project, only a topographic-wetness proxy standing in
+            for it.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>8. Interactive map — implementation notes</h2>
+          <p>
+            The interactive map (MapLibre GL JS, no third-party basemap
+            tiles) reads directly from the pipeline's own rasters and
+            vectors — biomes, rivers, lakes, the 17 Círculo sites, and four
+            raster overlays (precipitation, temperature, months-with-snow,
+            permanent snow). Since this world has no real latitude/
+            longitude, every layer is registered in a shared "pseudo-degree"
+            space: native LCC meters divided by a fixed
+            <code>SCALE = 100,000</code>, applied identically everywhere so
+            polygons, points, and raster image corners all land in the same
+            coordinate frame.
+          </p>
+          <p>
+            <strong>Biome polygon topology.</strong> The first
+            polygonization pass (marching-squares contours + a manual
+            "smallest contour in this crop is probably a hole" heuristic)
+            produced self-intersecting geometry, visible in MapLibre as
+            triangular WebGL rendering glitches. Rebuilt with
+            <code>cv2.findContours(mask, cv2.RETR_CCOMP)</code>, whose
+            parent/child contour hierarchy is algorithmically guaranteed
+            rather than guessed — this also fixed a second, opposite bug
+            introduced by an intermediate "just drop all holes" fix: real
+            interior enclaves (ocean bays cutting into a biome region) were
+            being silently painted over solid instead of left open.
+          </p>
+          <p>
+            <strong>River vectorization.</strong> The first attempt
+            contoured the thresholded stream mask into fill polygons, then
+            switched to a fixed-pixel-width line layer when those proved
+            invisible — but rivers still didn't render. The real problem
+            wasn't the layer type: a 30 m-wide stream corridor on a ~160 km
+            domain is sub-pixel at any reasonable zoom regardless of how
+            it's drawn, and contour-polygonizing that thin a mask fragments
+            it into disconnected blobs (the largest was 645 m across, not a
+            connected network). Fixed by skeletonizing the mask to a 1-pixel
+            centerline and tracing continuous chains through a graph
+            between junction/endpoint nodes — genuine topology instead of
+            disconnected contour fragments. The published network is also
+            filtered to a &gt;15 km² contributing-area threshold rather than
+            the full &gt;3 km² network: topologically correct at the lower
+            threshold, but visually dense enough to bury the biome layer
+            underneath it.
+          </p>
+          <p class="callout">
+            <strong>Astro-specific gotcha, worth stating generally:</strong>
+            a component's <code>&lt;style is:global&gt;</code> block is only
+            bundled into a page that actually imports that component —
+            sharing class names with another component on a different page
+            doesn't pull in its styles. The map's CSS is fully
+            self-contained for exactly this reason, not because it needed
+            to diverge from the Torino map's design.
+          </p>
+        </article>
+
+        <article class="step">
+          <h2>9. Sources and methodology references</h2>
+          <p>
+            Nothing on this page is real-world published GIS data — the
+            entire domain is synthetic/procedural. What follows are the
+            published methods and real reference datasets the pipeline
+            draws on for technique and validation, not for content:
+          </p>
+          <pre class="spec-block">Terrain texture (grafted detail):  SRTM GL3, Piemonte/western Alps
+Erosion:                            Beyer / Lague droplet-based hydraulic erosion
+Depression fill / flow routing:     Barnes, Lehman & Mulla (2014), Computers & Geosciences 62
+Orographic precipitation:           Smith & Barstad (2004), J. Atmos. Sci. 61(12)
+Lapse rate:                         Norton (1985); Franz Josef/Ben Ohau, NZ (Anderson et al. 2006; Doughty 2013)
+Snow/rain partition:                Jennings et al. (2018), Nature Communications 9:1148
+Degree-day melt factor:             Hock (2003), J. Hydrol. 282
+Biome classification:               Holdridge (1967), Life Zone Ecology
+Map projection math:                Snyder (1987), Map Projections — A Working Manual</pre>
+        </article>
+
+      </section>
+    </div>
+
+    <a class="cta-button" href={`${base}/en/case-study-worldbuilding/`}>
+      ← Back to the case study overview
+    </a>
+  </div>
 </BaseLayout>
+
+<style>
+  .page-container {
+    padding-left: clamp(2rem, 5vw, 2cm);
+    padding-top: clamp(2rem, 5vw, 2cm);
+    padding-bottom: clamp(2rem, 5vw, 2cm);
+  }
+  @media (max-width: 640px) {
+    .page-container {
+      padding-left: 1.5rem;
+      padding-top: 1.5rem;
+      padding-bottom: 1.5rem;
+    }
+  }
+  .case-study {
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-brass);
+    margin: 0 0 0.5rem;
+  }
+  .case-hero h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    line-height: 1.25;
+    margin: 0 0 1.25rem;
+  }
+  .intro, .step p:not(.callout) {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+  }
+  .aside {
+    font-family: var(--font-body);
+    font-style: italic;
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+    margin: 0 0 2rem;
+  }
+  .inline-link {
+    color: var(--color-brass);
+  }
+  .step {
+    margin: 2.5rem 0;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(198, 146, 20, 0.12);
+  }
+  .step h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.9rem;
+  }
+  .step h3.substep {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 1.75rem 0 0.75rem;
+  }
+  .step-ref {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--color-text-muted);
+  }
+  .callout {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    border-left: 3px solid var(--color-brass);
+    padding: 0.85rem 1.1rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+  }
+  .spec-block {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.6;
+    margin: 1rem 0;
+  }
+  .spec-list {
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    color: var(--color-text-muted-2);
+    line-height: 1.7;
+    margin: 0 0 1rem;
+    padding-left: 1.4rem;
+  }
+  .spec-list li {
+    margin-bottom: 0.4rem;
+  }
+  .spec-table-wrap {
+    margin: 1.25rem 0;
+    overflow-x: auto;
+  }
+  .spec-table {
+    width: 100%;
+    min-width: 32rem;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 1.25rem 0;
+  }
+  .spec-table th,
+  .spec-table td {
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(159, 173, 185, 0.15);
+  }
+  .spec-table th {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-brass);
+  }
+  .spec-table td {
+    font-family: var(--font-body);
+    color: var(--color-text-muted-2);
+    line-height: 1.55;
+  }
+  .spec-table code {
+    font-family: var(--font-mono);
+    color: var(--color-paper);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    color: var(--color-paper);
+    background: var(--color-ink-light);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    margin: 0 0.05em;
+    white-space: nowrap;
+  }
+  .map-source {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .analysis-map-wrap {
+    position: relative;
+    width: 100%;
+    margin: 1.5rem 0 0;
+  }
+  .analysis-map-wrap img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+  }
+  .cta-button {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--color-ink);
+    background: var(--color-brass);
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    text-decoration: none;
+    margin: 1rem 0 2rem;
+  }
+</style>
