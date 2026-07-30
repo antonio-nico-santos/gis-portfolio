@@ -1,6 +1,14 @@
 ---
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { base } from '../../../utils/base.js';
+import { Image } from 'astro:assets';
+import ChoroplethFigure from '../../../components/ChoroplethFigure.astro';
+import terrainHero from '../../../assets/images/worldbuilding-terrain.png';
+import biomeMap from '../../../assets/images/worldbuilding-biomes.png';
+import hydrologyMap from '../../../assets/images/worldbuilding-hydrology.png';
+import precipMap from '../../../assets/images/worldbuilding-precip.png';
+import tempMap from '../../../assets/images/worldbuilding-temp.png';
+import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png';
 ---
 <BaseLayout title="World-building GDR - Nico">
   <div class="page-container">
@@ -19,9 +27,25 @@ import { base } from '../../../utils/base.js';
           illustration.
         </p>
       </header>
+    </div>
 
-      <!-- TODO: hero image/figure (DEM overview or suitability map with the 17 settlements) -->
+    <figure class="hero-split">
+      <Image
+        src={suitabilityMap}
+        alt="Círculo settlement suitability composite with 17 placed sites"
+        widths={[400, 800, 1200]}
+        sizes="(max-width: 640px) 100vw, 60vw"
+        format="webp"
+        quality={80}
+      />
+      <div class="hero-text">
+        <h2>Latency: Settlement Suitability</h2>
+        <p>17 <em>Círculo</em> sites, placed by a five-criteria suitability model — slope, water access, solar exposure, agriculture, and biome.</p>
+      </div>
+    </figure>
+    <figcaption class="map-source">130 × 160 km domain · 17 <em>Círculo</em> sites (4 large · 5 medium · 8 small)</figcaption>
 
+    <div class="case-study">
       <section class="context">
         <p class="intro">
           <em>Latency</em> is the setting for a Solarpunk campaign: a society
@@ -65,8 +89,10 @@ import { base } from '../../../utils/base.js';
             Island — inside a custom 130 × 160 km domain. The mountainous
             spine and coastal plateaus were hand-digitized in QGIS as a
             "skeleton" of ridgelines and flat zones, then built out with
-            procedural noise and simulated hydraulic erosion into a full
-            elevation model.
+            Simplex noise and a droplet-based hydraulic erosion model,
+            domain-warped to avoid the unnaturally regular coastlines
+            noise alone tends to produce. Land ends up at 45.3% of the
+            130 × 160 km domain — an island, not a continent fragment.
           </p>
           <p>
             The second version had a problem I could see before I could
@@ -80,33 +106,69 @@ import { base } from '../../../utils/base.js';
             outright — cut that down to a negligible fraction, checked
             across several regions before moving forward.
           </p>
-          <!-- TODO: DEM hillshade overview image -->
+          <div class="analysis-map-wrap">
+            <Image
+              src={terrainHero}
+              alt="Hillshaded, hypsometrically tinted elevation model of Latency"
+              widths={[400, 800, 1200]}
+              sizes="(max-width: 640px) 100vw, 70vw"
+              format="webp"
+              quality={80}
+            />
+          </div>
+          <figcaption class="map-source">custom Lambert Conformal Conic · land 45.3% of domain</figcaption>
         </article>
 
         <article class="step">
           <h2>2. Climate</h2>
           <p>
-            Prevailing westerly winds hit the island's mountain spine and
-            drop their moisture on the windward slopes, leaving a drier
-            band in the rain shadow to the east — the same orographic
-            pattern that shapes the Southern Alps, which I used
-            throughout as a real-world reference to check that the
-            resulting temperature and rainfall patterns were physically
-            reasonable. That contrast — wet, temperate coasts on one
-            side; drier, more continental conditions on the other — is
-            the backbone of where the setting's biomes and, later, its
-            architecture diverge.
+            Monthly temperature and precipitation come from a linear
+            orographic model (Smith & Barstad, 2004): prevailing westerly
+            winds hit the island's mountain spine and drop their moisture
+            on the windward slopes, leaving a drier band in the rain
+            shadow to the east — the same pattern that shapes the
+            Southern Alps, which I used throughout as a real-world
+            reference to check that the resulting temperature and
+            rainfall patterns were physically reasonable. That contrast —
+            wet, temperate coasts on one side; drier, more continental
+            conditions on the other — is the backbone of where the
+            setting's biomes and, later, its architecture diverge.
           </p>
-          <!-- TODO: annual precipitation / temperature map -->
+          <div class="choropleth-grid">
+            <ChoroplethFigure
+              img={precipMap}
+              alt="Annual precipitation total, Latency"
+              title="Annual precipitation (mm)"
+              legend={[
+                { color: '#cfe8e6', label: '< 470 mm' },
+                { color: '#8fc3c2', label: '470–1,718 mm' },
+                { color: '#4f9396', label: '1,718–3,958 mm' },
+                { color: '#215f66', label: '> 3,958 mm' },
+              ]}
+            />
+            <ChoroplethFigure
+              img={tempMap}
+              alt="Annual mean temperature, Latency"
+              title="Annual mean temperature (°C)"
+              legend={[
+                { color: '#9ab8d6', label: '< 3.9 °C' },
+                { color: '#d9c49a', label: '3.9–8.7 °C' },
+                { color: '#d98f5a', label: '8.7–10.9 °C' },
+                { color: '#b84a3a', label: '> 10.9 °C' },
+              ]}
+            />
+          </div>
+          <figcaption class="map-source">Smith & Barstad (2004) orographic model · quantile class breaks</figcaption>
         </article>
 
         <article class="step">
           <h2>3. Snow and permanent ice</h2>
           <p>
             The interior's highest peaks hold permanent snow and ice,
-            mapped from a monthly accumulation/melt model rather than a
-            fixed elevation cutoff — the boundary shifts with slope and
-            aspect, not just altitude.
+            mapped from a positive-degree-day mass-balance model
+            (monthly accumulation vs. melt) rather than a fixed elevation
+            cutoff — the boundary shifts with slope and aspect, not just
+            altitude.
           </p>
           <p class="callout">
             <strong>Still under review:</strong> this is the stage I
@@ -121,19 +183,40 @@ import { base } from '../../../utils/base.js';
         <article class="step">
           <h2>4. Hydrology</h2>
           <p>
-            Rivers run off the mountain spine toward both coasts, feeding
-            lakes in the larger valleys — the water network that
-            determines where a Círculo can realistically draw water,
-            farm, or trade by boat. Two details came from years of
-            fieldwork surveying real watercourses: the first draft of the
-            stream network looked mechanically straight in a way no real
-            channel does, so I asked for it to be redrawn with more
-            organic curves; and the first version had no seasonal
-            variation, so I asked for flow to shift with monthly rainfall
-            and temperature — dry-season creeks, wet-season floods — the
-            way I've seen it behave in the field.
+            Flow direction and stream extraction use the Priority-Flood +
+            Epsilon algorithm (Barnes, Lehman & Mulla, 2014), which fills
+            depressions and derives drainage in a single pass. Rivers run
+            off the mountain spine toward both coasts, feeding lakes in
+            the larger valleys — the water network that determines where
+            a Círculo can realistically draw water, farm, or trade by
+            boat. Two details came from years of fieldwork surveying real
+            watercourses: the first draft of the stream network looked
+            mechanically straight in a way no real channel does, so I
+            asked for it to be redrawn with more organic curves; and the
+            first version had no seasonal variation, so I asked for flow
+            to shift with monthly rainfall and temperature — dry-season
+            creeks, wet-season floods — the way I've seen it behave in
+            the field.
           </p>
-          <!-- TODO: drainage network + lakes map, seasonal view -->
+          <p>
+            One cross-check: the discharge ratio between windward and
+            leeward basins came out at 5.9:1, close to the 5.6:1
+            precipitation ratio the climate stage had already validated
+            independently — the kind of internal consistency check that
+            doesn't prove the model right, but is a real signal it isn't
+            badly wrong.
+          </p>
+          <div class="analysis-map-wrap">
+            <Image
+              src={hydrologyMap}
+              alt="Drainage network and lakes derived from the DEM, major channels only"
+              widths={[400, 800, 1200]}
+              sizes="(max-width: 640px) 100vw, 70vw"
+              format="webp"
+              quality={82}
+            />
+          </div>
+          <figcaption class="map-source">Priority-Flood + Epsilon flow routing, thresholded to major channels for legibility at this scale</figcaption>
         </article>
 
         <article class="step">
@@ -163,35 +246,63 @@ import { base } from '../../../utils/base.js';
             instead of forcing Holdridge's absolute categories, was a
             deliberate decision once the data made the mismatch obvious.
           </p>
-          <!-- TODO: biome map with legend, possibly paired with architecture styles -->
+          <ChoroplethFigure
+            img={biomeMap}
+            alt="Biome classification of Latency, Holdridge Life Zone system"
+            title="Biomes (Holdridge Life Zone system)"
+            legend={[
+              { color: '#e0a83f', label: 'Lowland Steppe / Grassland — 2,962 km²' },
+              { color: '#7a9c4a', label: 'Woodland / Shrubland — 2,835 km²' },
+              { color: '#2e7d46', label: 'Temperate Forest — 690 km²' },
+              { color: '#1f6f54', label: 'Subalpine Wet Forest — 942 km²' },
+              { color: '#4f8a5c', label: 'Subalpine Woodland — 167 km²' },
+              { color: '#b8622e', label: 'Subalpine Dry Scrub — 335 km²' },
+              { color: '#a89bb0', label: 'Alpine Tundra — 617 km²' },
+              { color: '#8f8579', label: 'Alpine Fellfield — 396 km²' },
+              { color: '#f5f7f8', label: 'Permanent Snow & Ice — 960 km²' },
+              { color: '#bcdcee', label: 'Ocean — 10,919 km²' },
+            ]}
+          />
         </article>
 
         <article class="step">
           <h2>6. Settlement suitability</h2>
           <p>
             The final stage scores the land for settlement viability —
-            slope, water proximity, solar exposure, agricultural
-            potential, biome — for two culturally distinct settlement
-            patterns: the structured, permanent Círculos, and the more
-            mobile placement logic of the Povo Livre, groups descended
-            from exiles who never settled into fixed communities. A
-            separate exclusion layer keeps candidate sites clear of the
-            remote territories associated with the Povo Silencioso —
-            respecting, spatially, a piece of the setting's own lore
-            about a reclusive non-human people.
+            slope, water proximity, solar exposure (an FAO-56 clear-sky
+            radiation model, computed from scratch since GRASS's
+            <code>r.sun</code> wasn't available), agricultural potential,
+            biome — for two culturally distinct readings of the land: the
+            structured, permanent Círculos get discrete candidate sites;
+            the Povo Livre, groups descended from exiles who never
+            settled into fixed communities, get a continuous suitability
+            surface instead of point sites — a deliberate difference in
+            output, not a simplification, since a nomadic culture doesn't
+            have "candidate settlements" in the same sense. A separate
+            exclusion layer keeps candidate sites clear of the remote territories
+            associated with the Povo Silencioso — respecting, spatially,
+            a piece of the setting's own lore about a reclusive
+            non-human people. One methodological note worth naming:
+            slope was computed at native 30 m resolution then
+            block-max downsampled (not averaged) to the coarser working
+            grid, since a simple average understated the land's real
+            slope by close to half — the wrong direction of error for a
+            hazard criterion.
           </p>
           <p>
-            Distance between candidates was computed with a cost-aware
-            shortest-path model (accounting for terrain difficulty, not
-            just straight-line distance) rather than simple radius
-            exclusion, after an early version placed unrealistic
-            clusters. Manually reviewing the output caught real problems
-            the pipeline's own checks missed — settlements placed inside
-            lakes, two settlements placed too close together across
-            categories that weren't being cross-checked — a good
-            reminder that visual review and automated testing catch
-            different kinds of mistakes.
+            All 17 Círculos placements (four large, five medium, eight
+            small) came from this stage. Distance between candidates was computed with Dijkstra's
+            algorithm over Tobler's hiking-function cost surface
+            (accounting for terrain difficulty, not just straight-line
+            distance) rather than simple radius exclusion, after an early
+            version placed unrealistic clusters. Manually reviewing the
+            output caught real problems the pipeline's own checks missed
+            — settlements placed inside lakes, two settlements placed too
+            close together across categories that weren't being
+            cross-checked — a good reminder that visual review and
+            automated testing catch different kinds of mistakes.
           </p>
+          <p class="map-source">Full composite shown at the top of the page — slope, water proximity, solar exposure, agriculture, biome, weighted, markers sized by settlement tier (large/medium/small).</p>
           <!-- TODO: InteractiveMap (extends Torino's InteractiveMap.astro) —
                biome layer, climate layers, snow switcher, rivers as
                always-on context layer, suitability/settlements as final
@@ -206,11 +317,17 @@ import { base } from '../../../utils/base.js';
       <section class="result">
         <h2>Result</h2>
         <p>
-          17 candidate settlement sites across both cultures, consistent
-          with the terrain, climate, water access, and biome built up
-          over the previous five stages — a physically grounded map for a
-          setting that started as worldbuilding notes and TTRPG lore, now
-          with a geography that could, in principle, be surveyed. The
+17 Círculo settlement sites, on a 130 × 160 km island where land
+          covers 45.3% of the domain and biomes range from roughly 2,960
+          km² of lowland steppe in the rain shadow to under 1,000 km² of
+          permanent snow and ice on the interior peaks — consistent with
+          the terrain, climate, water access, and biome built up over the
+          previous five stages. The Povo Livre's relationship to the same
+          land is a separate suitability surface, not a set of points —
+          fitting for a culture defined by not settling. A physically
+          grounded map for a setting that started as worldbuilding notes
+          and TTRPG lore, now with a geography that could, in principle,
+          be surveyed. The
           pipeline stops here for portfolio purposes — further layers
           (regional detail, per-settlement zoom) are planned, but as
           depth for the campaign itself rather than additional case study
@@ -311,5 +428,85 @@ import { base } from '../../../utils/base.js';
     padding: 0.6rem 1.2rem;
     border-radius: 4px;
     text-decoration: none;
+  }
+  .hero-split {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin: 2rem 0 0;
+    max-width: 58rem;
+    width: 58rem;
+  }
+  .hero-split img {
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    border-radius: 8px;
+    display: block;
+  }
+  .hero-text {
+    flex: 0 0 15rem;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    padding: 1.25rem;
+    border-radius: 8px;
+  }
+  .hero-text h2 {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0 0 0.65rem;
+    line-height: 1.3;
+  }
+  .hero-text p {
+    font-family: var(--font-body);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin: 0;
+  }
+  .map-source {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .analysis-map-wrap {
+    position: relative;
+    width: 100%;
+    margin: 1.5rem 0;
+  }
+  .analysis-map-wrap img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
+  }
+  .choropleth-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    margin: 1.5rem 0;
+    width: 58rem;
+    max-width: 100%;
+  }
+  @media (max-width: 640px) {
+    .choropleth-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 900px) {
+    .hero-split {
+      width: 100%;
+    }
+  }
+  @media (max-width: 640px) {
+    .hero-split {
+      flex-direction: column;
+    }
+    .hero-text {
+      flex: 0 0 auto;
+    }
   }
 </style>
