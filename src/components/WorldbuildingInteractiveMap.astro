@@ -1,0 +1,757 @@
+---
+// WorldbuildingInteractiveMap.astro
+// MapLibre GL JS interactive map for the World-building case study, extending
+// the same base pattern as Torino's InteractiveMap.astro (toolbar + legend +
+// detail panel, no external basemap tiles, flat dark background).
+//
+// Key structural difference from Torino: Torino's toggleable layers are all
+// real administrative zone polygons with pre-computed per-zone properties.
+// Latency has no such unit for climate/snow — those are continuous 120m
+// rasters. Per the decision taken with Nico, only Biomes (naturally
+// categorical, polygonized from biome_id.tif) is a real clickable vector
+// layer with a detail panel. Precipitation, Temperature, and the two Snow
+// layers are raster image overlays — visual context you can switch to, but
+// without per-pixel click detail (see the "Point sampling" option we didn't
+// take, in favor of methodological honesty over UX parity with Torino).
+//
+// Coordinate system: Latency is a fictional world with no real lng/lat.
+// All GeoJSON files referenced here were pre-projected from the world's
+// native LCC meters into a "pseudo-degree" space by dividing by SCALE =
+// 100,000 (i.e. 100km per pseudo-degree unit), centered near [0,0] so
+// Mercator distortion is negligible at this domain's size. The four raster
+// overlays are plain PNG crops crops tight to the exact domain bounding box
+// (verified against the source .hdr georeferencing — see conversation log),
+// so the same linear conversion applied here as DOMAIN_BOUNDS gives their
+// correct MapLibre `image` source corners. Do NOT feed real-world lng/lat
+// into this component's data files — everything here shares one made-up
+// coordinate space and only aligns with itself, not with anything real.
+//
+// Data contract, biomes (GeoJSON FeatureCollection, Polygon per patch):
+//   properties: { biome_class: string (one of BIOME_INFO's keys), area_km2: number }
+// Data contract, rivers / lakes (GeoJSON FeatureCollection, Polygon per patch):
+//   no required properties — geometry only, single flat color, same
+//   thresholding/vectorization approach validated on the static hydrology map
+// Data contract, settlements (GeoJSON FeatureCollection, Point per site):
+//   properties: { name: string, tier: "large"|"medium"|"small", population: number }
+import { base } from '../utils/base.js';
+
+interface Props {
+  biomesUrl?: string;
+  riversUrl?: string;
+  lakesUrl?: string;
+  settlementsUrl?: string;
+  hillshadeImageUrl?: string;
+  precipImageUrl?: string;
+  tempImageUrl?: string;
+  snowMonthsImageUrl?: string;
+  snowPermanentImageUrl?: string;
+}
+const {
+  biomesUrl = `${base}/data/worldbuilding-biomes.geojson`,
+  riversUrl = `${base}/data/worldbuilding-rivers.geojson`,
+  lakesUrl = `${base}/data/worldbuilding-lakes.geojson`,
+  settlementsUrl = `${base}/data/worldbuilding-settlements.geojson`,
+  hillshadeImageUrl = `${base}/data/worldbuilding-hillshade.png`,
+  precipImageUrl = `${base}/data/worldbuilding-precip-clean.png`,
+  tempImageUrl = `${base}/data/worldbuilding-temp-clean.png`,
+  snowMonthsImageUrl = `${base}/data/worldbuilding-snow-months-clean.png`,
+  snowPermanentImageUrl = `${base}/data/worldbuilding-snow-permanent-clean.png`,
+} = Astro.props;
+---
+
+<div class="analysis-map-wrap interactive-map-wrap">
+  <div class="interactive-map-card">
+    <div class="map-toolbar" id="wb-map-toolbar" role="group" aria-label="Map layer selector"></div>
+    <div class="map-body">
+      <div class="map-canvas">
+        <div
+          id="wb-map"
+          data-biomes-url={biomesUrl}
+          data-rivers-url={riversUrl}
+          data-lakes-url={lakesUrl}
+          data-settlements-url={settlementsUrl}
+          data-hillshade-url={hillshadeImageUrl}
+          data-precip-url={precipImageUrl}
+          data-temp-url={tempImageUrl}
+          data-snow-months-url={snowMonthsImageUrl}
+          data-snow-permanent-url={snowPermanentImageUrl}
+        ></div>
+      </div>
+      <aside class="map-sidebar">
+        <div class="map-legend" id="wb-map-legend"></div>
+        <div class="zone-panel" id="wb-zone-panel">
+          <div class="zone-panel-header">
+            <span class="zone-panel-title">Biome details</span>
+            <button class="close-btn" id="wb-zone-panel-close" aria-label="Clear selection">&times;</button>
+          </div>
+          <div id="wb-zone-panel-content"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <p class="map-source">
+    Biome classification: Holdridge Life Zone system, rescaled aridity axis
+    (see Step 5). Landscape descriptions and real-world analogs:
+    <code>biome_landscape_characteristics.md</code>, validated against South
+    Island, New Zealand ecology. Climate and snow: Smith & Barstad (2004)
+    orographic model / Tappa 3 mass-balance snow model. Rivers and lakes are
+    shown as context only, thresholded the same way as the static hydrology
+    map.
+  </p>
+</div>
+
+<script>
+  import maplibregl from 'maplibre-gl';
+  import 'maplibre-gl/dist/maplibre-gl.css';
+
+  const SCALE = 100000.0;
+  // Domain bounding box, converted from the shared raw-data origin (xmin
+  // -65000, ymax 80000, 1084x1334 cells @ 120m — see .hdr files) into the
+  // same pseudo-degree space as every GeoJSON file this component loads.
+  // MapLibre's `image` source expects corners in
+  // [top-left, top-right, bottom-right, bottom-left] order.
+  const DOMAIN_CORNERS = [
+    [-65000 / SCALE, 80000 / SCALE],   // NW
+    [65080 / SCALE, 80000 / SCALE],    // NE
+    [65080 / SCALE, -80080 / SCALE],   // SE
+    [-65000 / SCALE, -80080 / SCALE],  // SW
+  ];
+
+  const COLOR_WATER = '#6CB8D9';
+  const COLOR_SETTLEMENT_FILL = '#16283A';
+  const COLOR_SETTLEMENT_STROKE = '#EDE6D3';
+
+  const BIOME_INFO = {
+    permanent_snow: {
+      label: 'Permanent Snow & Ice', color: '#f5f7f8',
+      elevation: '1,981–3,562 m (mean 2,782 m)', biotemp: '0.0–2.4°C (mean 0.6°C)',
+      warmest: '2.1°C', coldest: '−6.8°C', precip: '410–12,320 mm (mean 5,912 mm)',
+      description: 'No vegetation cover — permanently glaciated ground above the snowline: bare ice, firn, crevassed glacier tongues, and exposed rock ribs. Windward glaciers run broader and more heavily crevassed; leeward ones smaller and wind-scoured.',
+      analog: 'Southern Alps icefields — Aoraki/Mt Cook, Tasman Glacier.',
+    },
+    alpine_fellfield: {
+      label: 'Alpine Fellfield', color: '#8f8579',
+      elevation: '2,214–3,331 m (mean 2,689 m)', biotemp: '0.0–1.5°C (mean 0.67°C)',
+      warmest: '2.5°C', coldest: '−6.2°C', precip: '324–4,540 mm (mean 725 mm)',
+      description: 'The coldest vegetated ground in the domain: open, patchy terrain of bare rock, scree, and frost-shattered talus, with low cushion-forming and rosette plants confined to sheltered pockets rather than continuous cover.',
+      analog: 'NZ alpine fellfield above ~1,800–2,000 m.',
+    },
+    alpine_tundra: {
+      label: 'Alpine Tundra', color: '#a89bb0',
+      elevation: '1,727–2,376 m (mean 2,008 m)', biotemp: '1.5–3.0°C (mean 2.3°C)',
+      warmest: '6.0°C', coldest: '−3.1°C', precip: '324–10,625 mm (mean 3,497 mm)',
+      description: "Cold enough that trees can't close canopy, mild enough for a near-continuous low vegetation mat. Strong windward/leeward contrast within the same class — dense tall tussock on wet sides, a short sparse sward on dry sides.",
+      analog: 'NZ alpine tussock and herbfield zone.',
+    },
+    subalpine_wet_forest: {
+      label: 'Subalpine Wet Forest', color: '#1f6f54',
+      elevation: '1,035–1,850 m (mean 1,447 m)', biotemp: '3.0–6.0°C (mean 4.35°C)',
+      warmest: '8.9°C', coldest: '−0.4°C', precip: '1,508–9,857 mm (mean 5,594 mm)',
+      description: 'Closed-canopy forest with a heavy epiphyte and moss load and a damp, low-light understory — closer to cloud forest than typical temperate woodland.',
+      analog: 'High-elevation Nothofagus/beech forest on the wet, western Southern Alps.',
+    },
+    subalpine_woodland: {
+      label: 'Subalpine Woodland', color: '#4f8a5c',
+      elevation: '1,057–1,814 m (mean 1,381 m)', biotemp: '3.0–6.0°C (mean 4.86°C)',
+      warmest: '9.4°C', coldest: '0.3°C', precip: '334–2,954 mm (mean 1,301 mm)',
+      description: 'A more open canopy than the wet-forest class — trees still dominant but with visible gaps, a drier and sparser understory.',
+      analog: 'Drier montane beech stands and beech/shrub mosaics.',
+    },
+    subalpine_dry_scrub: {
+      label: 'Subalpine Dry Scrub', color: '#b8622e',
+      elevation: '1,067–1,839 m (mean 1,401 m)', biotemp: '3.0–6.0°C (mean 4.59°C)',
+      warmest: '8.8°C', coldest: '0.3°C', precip: '324–659 mm (mean 332 mm)',
+      description: 'No closed canopy at all — low sparse woody scrub and exposed ground between clumps, a genuine rain-shadow landscape rather than a thinned forest. Comes out entirely on the leeward side of the domain.',
+      analog: 'Driest rain-shadowed subalpine slopes — matagouri, Dracophyllum, Hebe scrub.',
+    },
+    temperate_forest: {
+      label: 'Temperate Forest', color: '#2e7d46',
+      elevation: '194–1,154 m (mean 815 m)', biotemp: '6.0–10.65°C (mean 7.51°C)',
+      warmest: '12.0°C', coldest: '3.0°C', precip: '3,014–7,323 mm (mean 4,936 mm)',
+      description: 'The tallest, lushest forest class in the domain — dense podocarp-broadleaf canopy with a fern, moss, and epiphyte-rich understory, most rainforest-like at its wettest, lowest sites.',
+      analog: 'South Island podocarp-broadleaf rainforest — rimu, kahikatea, kāmahi, rātā.',
+    },
+    woodland_shrubland: {
+      label: 'Woodland / Shrubland', color: '#7a9c4a',
+      elevation: '0–1,176 m (mean 293 m)', biotemp: '6.0–12.0°C (mean 10.01°C)',
+      warmest: '14.3°C', coldest: '5.7°C', precip: '664–5,291 mm (mean 2,385 mm)',
+      description: 'A genuine mosaic — patches of lower-stature forest and scrub interspersed with open ground, visibly patchy at map scale rather than a uniform canopy.',
+      analog: 'Mixed shrubland/open-forest mosaics of moderate-rainfall valleys.',
+    },
+    lowland_steppe: {
+      label: 'Lowland Steppe / Grassland', color: '#e0a83f',
+      elevation: '0–1,176 m (mean 230 m)', biotemp: '6.0–12.0°C (mean 10.45°C)',
+      warmest: '14.7°C', coldest: '6.2°C', precip: '324–1,310 mm (mean 531 mm)',
+      description: 'The warmest, driest land biome in the scheme — open, largely treeless grassland, golden-tan rather than green for most of the year.',
+      analog: 'Central Otago/Mackenzie Basin dry tussock grassland.',
+    },
+  };
+  const BIOME_ORDER = [
+    'lowland_steppe', 'woodland_shrubland', 'temperate_forest',
+    'subalpine_wet_forest', 'subalpine_woodland', 'subalpine_dry_scrub',
+    'alpine_tundra', 'alpine_fellfield', 'permanent_snow',
+  ];
+
+  // Raster overlay layers — visual context, no per-pixel click detail (see
+  // frontmatter comment). Legends mirror the exact classes/colors already
+  // published in the static ChoroplethFigure legends on this page, so the
+  // interactive map never contradicts the prose above it.
+  const RASTER_LAYERS = {
+    precip: {
+      label: 'Precipitation',
+      legendTitle: 'Annual precipitation (mm)',
+      urlKey: 'precip',
+      classes: [
+        { color: '#cfe8e6', label: '< 470 mm' },
+        { color: '#8fc3c2', label: '470–1,718 mm' },
+        { color: '#4f9396', label: '1,718–3,958 mm' },
+        { color: '#215f66', label: '> 3,958 mm' },
+      ],
+    },
+    temp: {
+      label: 'Temperature',
+      legendTitle: 'Annual mean temperature (°C)',
+      urlKey: 'temp',
+      classes: [
+        { color: '#9ab8d6', label: '< 3.9 °C' },
+        { color: '#d9c49a', label: '3.9–8.7 °C' },
+        { color: '#d98f5a', label: '8.7–10.9 °C' },
+        { color: '#b84a3a', label: '> 10.9 °C' },
+      ],
+    },
+    snow_months: {
+      label: 'Snow (months/yr)',
+      legendTitle: 'Months with snow per year',
+      urlKey: 'snowMonths',
+      classes: [
+        { color: '#4A5547', label: 'No snow' },
+        { color: '#3E5C74', label: '1–3 months' },
+        { color: '#5F82A0', label: '4–6 months' },
+        { color: '#93B4CE', label: '7–9 months' },
+        { color: '#D7E4EC', label: '10–12 months' },
+      ],
+    },
+    snow_permanent: {
+      label: 'Snow (permanent line)',
+      legendTitle: 'Permanent snow / firn (annual mass balance ≥ 0)',
+      urlKey: 'snowPermanent',
+      classes: [
+        { color: '#4A5547', label: 'No permanent snow' },
+        { color: '#f5f7f8', label: 'Permanent snow & ice' },
+      ],
+    },
+  };
+  const LAYER_ORDER = ['biome', 'precip', 'temp', 'snow_months', 'snow_permanent'];
+  const LAYER_LABELS = { biome: 'Biomes', ...Object.fromEntries(LAYER_ORDER.filter((k) => k !== 'biome').map((k) => [k, RASTER_LAYERS[k].label])) };
+
+  function initInteractiveMap(container) {
+    let activeLayer = 'biome';
+    const mapEl = container.querySelector('#wb-map');
+    const toolbarEl = container.querySelector('#wb-map-toolbar');
+    const legendEl = container.querySelector('#wb-map-legend');
+    const panelContentEl = container.querySelector('#wb-zone-panel-content');
+    const panelCloseEl = container.querySelector('#wb-zone-panel-close');
+
+    const urls = {
+      biomes: mapEl.dataset.biomesUrl,
+      rivers: mapEl.dataset.riversUrl,
+      lakes: mapEl.dataset.lakesUrl,
+      settlements: mapEl.dataset.settlementsUrl,
+      hillshade: mapEl.dataset.hillshadeUrl,
+      precip: mapEl.dataset.precipUrl,
+      temp: mapEl.dataset.tempUrl,
+      snowMonths: mapEl.dataset.snowMonthsUrl,
+      snowPermanent: mapEl.dataset.snowPermanentUrl,
+    };
+
+    function buildBiomeMatchExpression() {
+      const expr = ['match', ['get', 'biome_class']];
+      BIOME_ORDER.forEach((key) => expr.push(key, BIOME_INFO[key].color));
+      expr.push('#3a4a5c');
+      return expr;
+    }
+
+    function renderToolbar() {
+      toolbarEl.innerHTML = '';
+      LAYER_ORDER.forEach((key) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'layer-btn' + (key === activeLayer ? ' active' : '');
+        btn.textContent = LAYER_LABELS[key];
+        btn.setAttribute('aria-pressed', String(key === activeLayer));
+        btn.addEventListener('click', () => setActiveLayer(key));
+        toolbarEl.appendChild(btn);
+      });
+    }
+
+    function renderLegend() {
+      let html = '';
+      if (activeLayer === 'biome') {
+        html += '<p class="map-legend-title">Biomes (Holdridge Life Zone system)</p><ul>';
+        BIOME_ORDER.forEach((key) => {
+          const b = BIOME_INFO[key];
+          html += `<li><span class="swatch" style="background:${b.color}"></span>${b.label}</li>`;
+        });
+        html += `<li><span class="swatch-line selected-zone-line"></span>Selected biome (click)</li></ul>`;
+      } else {
+        const cfg = RASTER_LAYERS[activeLayer];
+        html += `<p class="map-legend-title">${cfg.legendTitle}</p><ul>`;
+        cfg.classes.forEach((c) => {
+          html += `<li><span class="swatch" style="background:${c.color}"></span>${c.label}</li>`;
+        });
+        html += `</ul>`;
+      }
+      html += `<p class="map-legend-subtitle">Context layers</p><ul class="context-scale">`;
+      html += `<li><span class="swatch" style="background:${COLOR_WATER}"></span>Rivers &amp; lakes</li>`;
+      html += `<li><span class="swatch-dot" style="background:${COLOR_SETTLEMENT_FILL};border-color:${COLOR_SETTLEMENT_STROKE}"></span>Círculo settlements (17)</li>`;
+      html += `</ul>`;
+      legendEl.innerHTML = html;
+    }
+
+    const PANEL_PLACEHOLDER_BIOME =
+      '<p class="zone-panel-placeholder">Click a biome patch on the map to see its landscape character here.</p>';
+    const PANEL_PLACEHOLDER_RASTER =
+      '<p class="zone-panel-placeholder">This layer is visual context only — switch to Biomes for a clickable breakdown per patch.</p>';
+
+    function showBiomePanel(props) {
+      const b = BIOME_INFO[props.biome_class];
+      if (!b) return;
+      panelContentEl.innerHTML = `
+          <h3>${b.label}</h3>
+          <dl>
+            <dt>Elevation</dt><dd>${b.elevation}</dd>
+            <dt>Biotemperature</dt><dd>${b.biotemp}</dd>
+            <dt>Warmest month</dt><dd>${b.warmest}</dd>
+            <dt>Coldest month</dt><dd>${b.coldest}</dd>
+            <dt>Annual precipitation</dt><dd>${b.precip}</dd>
+          </dl>
+          <p class="zone-panel-desc">${b.description}</p>
+          <p class="zone-panel-analog">Real-world analog: ${b.analog}</p>
+        `;
+    }
+    panelContentEl.innerHTML = PANEL_PLACEHOLDER_BIOME;
+
+    let setSelectedBiome = () => {};
+
+    panelCloseEl.addEventListener('click', () => {
+      panelContentEl.innerHTML = activeLayer === 'biome' ? PANEL_PLACEHOLDER_BIOME : PANEL_PLACEHOLDER_RASTER;
+      setSelectedBiome(null);
+    });
+
+    let map;
+
+    function setActiveLayer(key) {
+      activeLayer = key;
+      renderToolbar();
+      renderLegend();
+      panelContentEl.innerHTML = key === 'biome' ? PANEL_PLACEHOLDER_BIOME : PANEL_PLACEHOLDER_RASTER;
+      setSelectedBiome(null);
+      if (!map || !map.getLayer('zones-fill')) return;
+      map.setLayoutProperty('zones-fill', 'visibility', key === 'biome' ? 'visible' : 'none');
+      map.setLayoutProperty('zones-outline', 'visibility', key === 'biome' ? 'visible' : 'none');
+      LAYER_ORDER.filter((k) => k !== 'biome').forEach((k) => {
+        if (map.getLayer(`raster-${k}`)) {
+          map.setLayoutProperty(`raster-${k}`, 'visibility', k === key ? 'visible' : 'none');
+        }
+      });
+    }
+
+    async function fetchGeoJSON(url, label) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error(`[WorldbuildingInteractiveMap] failed to load "${label}" from ${url}:`, err.message);
+        return { type: 'FeatureCollection', features: [] };
+      }
+    }
+
+    async function boot() {
+      const [biomes, rivers, lakes, settlements] = await Promise.all([
+        fetchGeoJSON(urls.biomes, 'biomes'),
+        fetchGeoJSON(urls.rivers, 'rivers'),
+        fetchGeoJSON(urls.lakes, 'lakes'),
+        fetchGeoJSON(urls.settlements, 'settlements'),
+      ]);
+
+      map = new maplibregl.Map({
+        container: mapEl,
+        style: {
+          version: 8,
+          sources: {},
+          layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0A1620' } }],
+        },
+        attributionControl: false,
+        bounds: DOMAIN_CORNERS.map(([lng, lat]) => [lng, lat]).reduce(
+          (acc, [lng, lat]) => [
+            [Math.min(acc[0][0], lng), Math.min(acc[0][1], lat)],
+            [Math.max(acc[1][0], lng), Math.max(acc[1][1], lat)],
+          ],
+          [
+            [Infinity, Infinity],
+            [-Infinity, -Infinity],
+          ],
+        ),
+        fitBoundsOptions: { padding: 20 },
+      });
+
+      map.on('load', () => {
+        // 1. Hillshade — always-on base texture, independent of the layer
+        // switcher (biomes had no relief texture under its flat fill,
+        // unlike every raster overlay which already has hillshade baked in
+        // from QGIS — this closes that gap so Biomes reads consistently
+        // with the rest of the map set).
+        map.addSource('hillshade-src', { type: 'image', url: urls.hillshade, coordinates: DOMAIN_CORNERS });
+        map.addLayer({
+          id: 'hillshade-base',
+          type: 'raster',
+          source: 'hillshade-src',
+          paint: { 'raster-opacity': 1 },
+        });
+
+        // 2. Raster overlays — hidden by default (initial active layer is
+        // 'biome', a vector layer, so every raster starts hidden).
+        const rasterSources = { precip: urls.precip, temp: urls.temp, snowMonths: urls.snowMonths, snowPermanent: urls.snowPermanent };
+        LAYER_ORDER.filter((k) => k !== 'biome').forEach((key) => {
+          const cfg = RASTER_LAYERS[key];
+          const url = rasterSources[cfg.urlKey];
+          map.addSource(`raster-src-${key}`, { type: 'image', url, coordinates: DOMAIN_CORNERS });
+          map.addLayer({
+            id: `raster-${key}`,
+            type: 'raster',
+            source: `raster-src-${key}`,
+            paint: { 'raster-opacity': 0.95 },
+            layout: { visibility: 'none' },
+          });
+        });
+
+        // 3. Biome fill — the interactive, clickable layer, default visible.
+        // Opacity below 1 lets the hillshade layer underneath show through,
+        // same visual convention as the static biome map.
+        map.addSource('zones', { type: 'geojson', data: biomes });
+        map.addLayer({
+          id: 'zones-fill',
+          type: 'fill',
+          source: 'zones',
+          paint: { 'fill-color': buildBiomeMatchExpression(), 'fill-opacity': 0.75 },
+        });
+        map.addLayer({
+          id: 'zones-outline',
+          type: 'line',
+          source: 'zones',
+          paint: { 'line-color': '#0A1620', 'line-width': 0.5, 'line-opacity': 0.3 },
+        });
+
+        // 4. Rivers & lakes — always-on context, drawn above everything so
+        // it reads regardless of which layer (vector or raster) is active.
+        // Rivers are rendered as a LINE (fixed pixel width), not a fill: the
+        // source polygons are thin corridor outlines vectorized from a 30m
+        // raster, and at this domain's scale (~160km tall) a geographically
+        // true fill would be sub-pixel wide and invisible at most zoom
+        // levels — a fixed on-screen line width guarantees visibility
+        // regardless of zoom, the same reason Torino uses a line layer for
+        // its own watercourses.
+        map.addSource('rivers', { type: 'geojson', data: rivers });
+        map.addLayer({
+          id: 'rivers-line',
+          type: 'line',
+          source: 'rivers',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': COLOR_WATER, 'line-width': 1, 'line-opacity': 0.8 },
+        });
+        map.addSource('lakes', { type: 'geojson', data: lakes });
+        map.addLayer({
+          id: 'lakes-fill',
+          type: 'fill',
+          source: 'lakes',
+          paint: { 'fill-color': COLOR_WATER, 'fill-opacity': 0.85 },
+        });
+
+        // 4. Círculo settlements — always-on context, sized by tier. No
+        // click panel (see frontmatter comment); a native title attribute
+        // isn't available on canvas-rendered features, so these are purely
+        // visual markers, consistent with the static suitability map.
+        map.addSource('settlements', { type: 'geojson', data: settlements });
+        map.addLayer({
+          id: 'settlements-circle',
+          type: 'circle',
+          source: 'settlements',
+          paint: {
+            'circle-radius': ['match', ['get', 'tier'], 'large', 7, 'medium', 5, 'small', 3, 4],
+            'circle-color': COLOR_SETTLEMENT_FILL,
+            'circle-stroke-color': COLOR_SETTLEMENT_STROKE,
+            'circle-stroke-width': 1.5,
+          },
+        });
+
+        // 5. Selected-biome highlight — filter-driven, same pattern as Torino.
+        map.addLayer({
+          id: 'zones-selected-outline',
+          type: 'line',
+          source: 'zones',
+          filter: ['==', ['get', 'biome_class'], ''],
+          paint: { 'line-color': '#C69214', 'line-width': 2.5 },
+        });
+
+        setSelectedBiome = (biomeClass) => {
+          map.setFilter('zones-selected-outline', ['==', ['get', 'biome_class'], biomeClass || '']);
+        };
+
+        map.on('mouseenter', 'zones-fill', () => (map.getCanvas().style.cursor = 'pointer'));
+        map.on('mouseleave', 'zones-fill', () => (map.getCanvas().style.cursor = ''));
+        map.on('click', 'zones-fill', (e) => {
+          if (activeLayer !== 'biome') return;
+          const props = e.features[0].properties;
+          showBiomePanel(props);
+          setSelectedBiome(props.biome_class);
+        });
+      });
+    }
+
+    renderToolbar();
+    renderLegend();
+    boot().catch((err) => console.error('[WorldbuildingInteractiveMap] boot() failed:', err));
+  }
+
+  document.querySelectorAll('.interactive-map-wrap').forEach((el) => {
+    if (el.querySelector('#wb-map')) initInteractiveMap(el);
+  });
+</script>
+
+<style is:global>
+  /* is:global (same reason as Torino's InteractiveMap.astro): toolbar,
+     legend, and detail panel are populated via innerHTML client-side, so
+     Astro's scoped-style attribute never reaches them — see that
+     component's frontmatter comment for the full QA history of this bug.
+     IMPORTANT: this block is a full, self-contained copy of Torino's
+     structural map CSS (toolbar/canvas/sidebar/legend/panel), not just the
+     incremental rules this component adds on top. Astro only ships a
+     component's <style> block on pages that actually import that
+     component — this page never imports Torino's InteractiveMap.astro, so
+     nothing from it is available here "for free". Keep this block in sync
+     with Torino's if the shared visual convention changes. */
+  .interactive-map-wrap {
+    width: 68rem;
+    max-width: 100%;
+    margin: 1.5rem 0;
+  }
+  @media (max-width: 900px) {
+    .interactive-map-wrap {
+      width: 100%;
+    }
+  }
+  .map-source {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .map-source a {
+    color: var(--color-brass);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+  .map-source a:hover {
+    color: var(--color-paper);
+  }
+  .interactive-map-card {
+    background: var(--color-ink-light);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(198, 146, 20, 0.15);
+  }
+  .map-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(198, 146, 20, 0.15);
+  }
+  .layer-btn {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    background: transparent;
+    color: var(--color-text-muted-2);
+    border: 1px solid rgba(159, 173, 185, 0.3);
+    border-radius: 4px;
+    padding: 0.4rem 0.65rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .layer-btn:hover {
+    color: var(--color-paper);
+    border-color: var(--color-brass);
+  }
+  .layer-btn.active {
+    background: var(--color-brass);
+    color: var(--color-ink);
+    border-color: var(--color-brass);
+    font-weight: 600;
+  }
+  .map-body {
+    display: flex;
+    align-items: stretch;
+  }
+  .map-canvas {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  #wb-map {
+    width: 100%;
+    height: 480px;
+  }
+  .map-sidebar {
+    width: 250px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: rgba(22, 40, 58, 0.95);
+    border-left: 1px solid rgba(198, 146, 20, 0.2);
+  }
+  .map-legend {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(159, 173, 185, 0.15);
+  }
+  .map-legend-title {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-paper);
+    margin: 0 0 0.45rem;
+  }
+  .map-legend-subtitle {
+    margin: 0.6rem 0 0.35rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(159, 173, 185, 0.15);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+  .map-legend ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .map-legend li {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--color-text-muted-2);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .map-legend .swatch {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .map-legend .swatch-line {
+    width: 0.9rem;
+    height: 2px;
+    flex-shrink: 0;
+  }
+  .map-legend .selected-zone-line {
+    background: var(--color-brass);
+  }
+  .map-legend .swatch-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    border: 1.5px solid;
+    flex-shrink: 0;
+  }
+  .zone-panel {
+    flex: 1 1 auto;
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .zone-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(159, 173, 185, 0.15);
+  }
+  .zone-panel-title {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+  .zone-panel-placeholder {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+  .zone-panel h3 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    color: var(--color-brass);
+    margin: 0 0 0.6rem;
+  }
+  .zone-panel dl {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+  }
+  .zone-panel dt {
+    color: var(--color-text-muted);
+    margin-top: 0.4rem;
+  }
+  .zone-panel dd {
+    margin: 0;
+    color: var(--color-paper);
+  }
+  .zone-panel .close-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .zone-panel-desc {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--color-text-muted-2);
+    margin: 0.6rem 0 0;
+  }
+  .zone-panel-analog {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-style: italic;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+    margin: 0.5rem 0 0;
+  }
+  @media (max-width: 640px) {
+    .map-body {
+      flex-direction: column;
+    }
+    #wb-map {
+      height: 380px;
+    }
+    .map-sidebar {
+      width: 100%;
+      border-left: none;
+      border-top: 1px solid rgba(198, 146, 20, 0.2);
+      font-size: 0.9em;
+    }
+  }
+</style>

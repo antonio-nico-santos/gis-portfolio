@@ -3,6 +3,7 @@ import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { base } from '../../../utils/base.js';
 import { Image } from 'astro:assets';
 import ChoroplethFigure from '../../../components/ChoroplethFigure.astro';
+import WorldbuildingInteractiveMap from '../../../components/WorldbuildingInteractiveMap.astro';
 import terrainHero from '../../../assets/images/worldbuilding-terrain.png';
 import biomeMap from '../../../assets/images/worldbuilding-biomes.png';
 import hydrologyMap from '../../../assets/images/worldbuilding-hydrology.png';
@@ -303,13 +304,11 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
             automated testing catch different kinds of mistakes.
           </p>
           <p class="map-source">Full composite shown at the top of the page — slope, water proximity, solar exposure, agriculture, biome, weighted, markers sized by settlement tier (large/medium/small).</p>
-          <!-- TODO: InteractiveMap (extends Torino's InteractiveMap.astro) —
-               biome layer, climate layers, snow switcher, rivers as
-               always-on context layer, suitability/settlements as final
-               layer. 3D drape (MapLibre raster-dem) sequenced after this
-               stage. Open decisions before building this: isolines vs.
-               choropleth for climate, seasonal snapshot months, accent
-               color/motif hex values — see worldbuilding-case-study-draft.md -->
+
+          <WorldbuildingInteractiveMap />
+          <!-- TODO: 3D drape (MapLibre raster-dem terrain), sequenced after
+               this stage per the Tappa 0 decision — deliberately not part of
+               this interactive map, see Livello 3 outline. -->
         </article>
 
       </section>
