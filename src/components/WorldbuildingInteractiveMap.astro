@@ -103,8 +103,8 @@ const {
     (see Step 5). Landscape descriptions and real-world analogs:
     <code>biome_landscape_characteristics.md</code>, validated against South
     Island, New Zealand ecology. Climate and snow: Smith & Barstad (2004)
-    orographic model / Tappa 3 mass-balance snow model. Povo Livre
-    suitability: same five-criteria composite as the Círculo model (Step
+    orographic model / Tappa 3 mass-balance snow model. <em>Povo Livre</em>
+    suitability: same five-criteria composite as the <em>Círculo</em> model (Step
     6), reweighted for a forestry-foraging economy (biome 0.60, agriculture
     0.10) — a continuous surface rather than discrete sites, since a
     culture defined by not settling has no "candidate settlements" to
@@ -255,7 +255,7 @@ const {
     },
     povo_livre: {
       label: 'Povo Livre suitability',
-      legendTitle: 'Povo Livre suitability (foraging/forestry composite)',
+      legendTitle: '<em>Povo Livre</em> suitability (foraging/forestry composite)',
       urlKey: 'povoLivre',
       classes: [
         { color: '#e8dde0', label: '< 0.43 (low)' },
@@ -331,7 +331,7 @@ const {
       }
       html += `<p class="map-legend-subtitle">Context layers</p><ul class="context-scale">`;
       html += `<li><span class="swatch" style="background:${COLOR_WATER}"></span>Rivers &amp; lakes</li>`;
-      html += `<li><span class="swatch-dot" style="background:${COLOR_SETTLEMENT_FILL};border-color:${COLOR_SETTLEMENT_STROKE}"></span>Círculo settlements (17)</li>`;
+      html += `<li><span class="swatch-dot" style="background:${COLOR_SETTLEMENT_FILL};border-color:${COLOR_SETTLEMENT_STROKE}"></span><em>Círculo</em> settlements (17)</li>`;
       html += `</ul>`;
       legendEl.innerHTML = html;
     }

@@ -40,7 +40,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
         quality={80}
       />
       <div class="hero-text">
-        <h2>Latency: Settlement Suitability</h2>
+        <h2><em>Latência</em>: Settlement Suitability</h2>
         <p>17 <em>Círculo</em> sites, placed by a five-criteria suitability model — slope, water access, solar exposure, agriculture, and biome.</p>
       </div>
     </figure>
@@ -49,7 +49,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
     <div class="case-study">
       <section class="context">
         <p class="intro">
-          <em>Latency</em> is the setting for a Solarpunk campaign: a society
+          <em>Latência</em> is the setting for a Solarpunk campaign: a society
           organized into autonomous, decentralized settlements called
           <em>Círculos</em>, built around cooperation and sustainability
           rather than hierarchy or scarcity. I wanted the physical
@@ -110,7 +110,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
           <div class="analysis-map-wrap">
             <Image
               src={terrainHero}
-              alt="Hillshaded, hypsometrically tinted elevation model of Latency"
+              alt="Hillshaded, hypsometrically tinted elevation model of Latência"
               widths={[400, 800, 1200]}
               sizes="(max-width: 640px) 100vw, 70vw"
               format="webp"
@@ -138,7 +138,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
           <div class="choropleth-grid">
             <ChoroplethFigure
               img={precipMap}
-              alt="Annual precipitation total, Latency"
+              alt="Annual precipitation total, Latência"
               title="Annual precipitation (mm)"
               legend={[
                 { color: '#cfe8e6', label: '< 470 mm' },
@@ -149,7 +149,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
             />
             <ChoroplethFigure
               img={tempMap}
-              alt="Annual mean temperature, Latency"
+              alt="Annual mean temperature, Latência"
               title="Annual mean temperature (°C)"
               legend={[
                 { color: '#9ab8d6', label: '< 3.9 °C' },
@@ -189,7 +189,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
             depressions and derives drainage in a single pass. Rivers run
             off the mountain spine toward both coasts, feeding lakes in
             the larger valleys — the water network that determines where
-            a Círculo can realistically draw water, farm, or trade by
+            a <em>Círculo</em> can realistically draw water, farm, or trade by
             boat. Two details came from years of fieldwork surveying real
             watercourses: the first draft of the stream network looked
             mechanically straight in a way no real channel does, so I
@@ -249,7 +249,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
           </p>
           <ChoroplethFigure
             img={biomeMap}
-            alt="Biome classification of Latency, Holdridge Life Zone system"
+            alt="Biome classification of Latência, Holdridge Life Zone system"
             title="Biomes (Holdridge Life Zone system)"
             legend={[
               { color: '#e0a83f', label: 'Lowland Steppe / Grassland — 2,962 km²' },
@@ -274,14 +274,14 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
             radiation model, computed from scratch since GRASS's
             <code>r.sun</code> wasn't available), agricultural potential,
             biome — for two culturally distinct readings of the land: the
-            structured, permanent Círculos get discrete candidate sites;
-            the Povo Livre, groups descended from exiles who never
+            structured, permanent <em>Círculos</em> get discrete candidate sites;
+            the <em>Povo Livre</em>, groups descended from exiles who never
             settled into fixed communities, get a continuous suitability
             surface instead of point sites — a deliberate difference in
             output, not a simplification, since a nomadic culture doesn't
             have "candidate settlements" in the same sense. A separate
             exclusion layer keeps candidate sites clear of the remote territories
-            associated with the Povo Silencioso — respecting, spatially,
+            associated with the <em>Povo Silencioso</em> — respecting, spatially,
             a piece of the setting's own lore about a reclusive
             non-human people. One methodological note worth naming:
             slope was computed at native 30 m resolution then
@@ -291,7 +291,7 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
             hazard criterion.
           </p>
           <p>
-            All 17 Círculos placements (four large, five medium, eight
+            All 17 <em>Círculos</em> placements (four large, five medium, eight
             small) came from this stage. Distance between candidates was computed with Dijkstra's
             algorithm over Tobler's hiking-function cost surface
             (accounting for terrain difficulty, not just straight-line
@@ -313,12 +313,12 @@ import suitabilityMap from '../../../assets/images/worldbuilding-suitability.png
       <section class="result">
         <h2>Result</h2>
         <p>
-17 Círculo settlement sites, on a 130 × 160 km island where land
+17 <em>Círculo</em> settlement sites, on a 130 × 160 km island where land
           covers 45.3% of the domain and biomes range from roughly 2,960
           km² of lowland steppe in the rain shadow to under 1,000 km² of
           permanent snow and ice on the interior peaks — consistent with
           the terrain, climate, water access, and biome built up over the
-          previous five stages. The Povo Livre's relationship to the same
+          previous five stages. The <em>Povo Livre</em>'s relationship to the same
           land is a separate suitability surface, not a set of points —
           fitting for a culture defined by not settling. A physically
           grounded map for a setting that started as worldbuilding notes
